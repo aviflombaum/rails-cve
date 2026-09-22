@@ -55,6 +55,10 @@ export function IntegrationIndex() {
               ownership challenge, queues events, and starts a local investigation.
             </p>
             <p>
+              Prefer to run the brief yourself? Every advisory page has a copyable brief and a
+              downloadable SKILL.md. <a href="/docs/agents">How to use it with your agent →</a>
+            </p>
+            <p>
               These are setup instructions, not preinstalled adapters. Keep your gateway private and
               review configuration changes before enabling tools. Receiving an advisory does not
               authorize code changes or deployment.

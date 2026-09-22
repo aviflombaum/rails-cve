@@ -1,6 +1,5 @@
 import { raw } from "hono/html";
 import { getContext } from "hono/context-storage";
-import { examplePayload, examplePreview } from "./examples";
 import type { Child } from "hono/jsx";
 import type { Advisory } from "./advisories";
 import type { Endpoint } from "./delivery";
@@ -52,7 +51,7 @@ export function Layout({
       <a
         href="/docs"
         aria-current={active === "docs" ? "page" : undefined}>
-        How it works
+        Docs
       </a>
       <a
         href="/dashboard"
@@ -203,12 +202,11 @@ export function Layout({
                 <a href="https://github.com/rails/rails/security/advisories">
                   Rails security advisories ↗
                 </a>
-                <a href="/docs">Webhook documentation</a>
+                <a href="/docs">Get started</a>
+                <a href="/docs/webhooks">Webhook contract</a>
                 <a href="/api/advisories">JSON feed</a>
                 <SourceLink />
-                <a href="https://github.com/aviflombaum/rails-cve/blob/main/docs/deploy-with-agent.md">
-                  Deploy your own →
-                </a>
+                <a href="/docs/self-host">Deploy your own →</a>
               </div>
               <p>
                 Built by <a href="https://avi.nyc">Avi Flombaum</a>.<br />
@@ -276,7 +274,7 @@ export function Home({
               <em>Right on track.</em>
             </h1>
             <p class="lead">
-              Rails advisories, delivered to your codebase. Get a signed webhook and a clear
+              Rails advisories, delivered to your codebase by email or signed webhook, with a clear
               starting point for your coding agent.
             </p>
             <div class="actions">
@@ -287,7 +285,7 @@ export function Home({
               </a>
               <a
                 class="text-link"
-                href="/docs#example-payload">
+                href="/docs/webhooks#example-payload">
                 See an example payload <span aria-hidden="true">→</span>
               </a>
             </div>
@@ -311,8 +309,8 @@ export function Home({
               <div class="flow-number">02</div>
               <div>
                 <p class="mono">THE SIGNAL</p>
-                <h3>Your webhook receives it</h3>
-                <p>Signed, timestamped, and retried.</p>
+                <h3>Your app hears about it</h3>
+                <p>By email or signed webhook. Retried until it lands.</p>
               </div>
             </div>
             <div class="flow-line" />
@@ -338,7 +336,7 @@ export function Home({
       <section class="source-strip">
         <div class="container">
           <p>From the Rails maintainers</p>
-          <span>Signed with HMAC-SHA256</span>
+          <span>Email or signed webhook</span>
           <span>Agent-ready investigation briefs</span>
           <span>No repository access required</span>
         </div>
@@ -747,7 +745,7 @@ export function SecretPage({
                 field. Return that value as the plain-text response body with a 2xx status.
               </p>
               <p>Configure the secret in your receiver, then verify the connection.</p>
-              <a href="/docs#receiver">Receiver example and signing instructions →</a>
+              <a href="/docs/webhooks#receiver">Receiver example and signing instructions →</a>
             </div>
           )}
           <a
@@ -776,178 +774,6 @@ export function ErrorPage({ message }: { message: string }) {
             class="button secondary"
             href="/dashboard">
             Return to your workspace →
-          </a>
-        </div>
-      </section>
-    </Layout>
-  );
-}
-export function Docs() {
-  const appUrl = getContext<{ Bindings: Env }>().env.APP_URL;
-  return (
-    <Layout
-      title="How it works"
-      path="/docs"
-      active="docs">
-      <section class="section">
-        <div class="container docs">
-          <p class="eyebrow">A DIRECT LINE TO YOUR APPLICATION</p>
-          <h1 class="page-title">
-            A small webhook.
-            <br />A useful head start.
-          </h1>
-          <p class="lead">
-            Rails CVE checks the Rails maintainers’ advisories every five minutes and relays new or
-            updated entries to verified endpoints.
-          </p>
-          <div class="prose">
-            <p>
-              <a href="/integrations">OpenClaw, Hermes, and self-hosting setup prompts →</a>
-            </p>
-            <h2>The delivery contract</h2>
-            <p>
-              Every request is an HTTPS POST with JSON. Events include{" "}
-              <code>advisory.published</code>, <code>advisory.updated</code>,{" "}
-              <code>advisory.withdrawn</code>, and <code>endpoint.test</code>. Advisory payloads
-              include the source URL, severity, package ranges, patched versions, and an
-              investigation prompt.
-            </p>
-            <section
-              id="example-payload"
-              class="payload-example"
-              aria-labelledby="example-title">
-              <p class="eyebrow">A REAL ADVISORY. AN EXAMPLE DELIVERY.</p>
-              <h2 id="example-title">What lands in your webhook.</h2>
-              <div class="detail-meta">
-                <Badge severity="critical" />
-                <span class="mono">CVE-2026-66066</span>
-                <span>Published July 29, 2026</span>
-              </div>
-              <p>
-                The recent Active Storage advisory is a useful example: applications using libvips
-                with untrusted uploads may expose server files, with potential escalation to remote
-                code execution. This payload includes the exact affected and patched versions, the
-                canonical advisory, and an investigation brief for your agent.
-              </p>
-              <p class="source-note">
-                Advisory snapshot captured September 22, 2026. The event ID and delivery time are
-                illustrative; this is not a recorded notification. The preview shortens the two long
-                text fields. Copy or download the complete payload to see both in full.
-              </p>
-              <pre
-                class="payload-code"
-                aria-label="Abbreviated example webhook JSON">
-                {JSON.stringify(examplePreview(appUrl), null, 2)}
-              </pre>
-              <div class="actions payload-actions">
-                <button
-                  type="button"
-                  class="button secondary"
-                  data-copy="example-json">
-                  Copy complete JSON
-                </button>
-                <a
-                  class="text-link"
-                  href="/examples/cve-2026-66066.json"
-                  download>
-                  Download JSON ↓
-                </a>
-                <a
-                  class="text-link"
-                  href="/advisories/GHSA-xr9x-r78c-5hrm">
-                  Read the advisory →
-                </a>
-              </div>
-              <p
-                id="copy-status"
-                role="status"
-                aria-live="polite"
-              />
-              <details class="prompt-details">
-                <summary>Read the agent prompt included in this payload</summary>
-                <pre class="payload-code">{examplePayload(appUrl).investigation.prompt}</pre>
-              </details>
-              <details class="prompt-details">
-                <summary>Inspect the complete JSON payload</summary>
-                <pre
-                  id="example-json"
-                  class="payload-code">
-                  {JSON.stringify(examplePayload(appUrl), null, 2)}
-                </pre>
-              </details>
-              <p>
-                The prompt asks the agent to inspect Gemfile.lock and application configuration,
-                establish applicability with evidence, and propose a fix for review. It also links
-                the Rails forensic toolkit for this CVE. Receiving the event does not mean your
-                application is affected, and does not run an agent automatically.
-              </p>
-            </section>
-            <h2>Verify before you enqueue</h2>
-            <p>
-              Compute HMAC-SHA256 using your signing secret and the exact string{" "}
-              <code>timestamp + "." + raw_body</code>. Compare with the hexadecimal digest in{" "}
-              <code>X-Rails-CVE-Signature</code> after its <code>v1=</code> prefix using a
-              constant-time comparison. Reject timestamps more than five minutes from your clock.
-            </p>
-            <p>
-              The timestamp is in <code>X-Rails-CVE-Timestamp</code>. Deduplicate the signed body’s{" "}
-              <code>id</code> with a unique database constraint. Acknowledge only after durable
-              enqueueing. Return 2xx promptly; redirects are never followed. Deliveries are at least
-              once and may arrive out of order.
-            </p>
-            <h2 id="receiver">Verify endpoint ownership</h2>
-            <p>
-              After saving a connection, install the signing secret in your receiver. Click Verify
-              endpoint in your workspace. We send a signed <code>endpoint.verification</code> event
-              with a random <code>challenge</code>. Return the challenge verbatim as a plain-text
-              body and a 2xx status. Then you can send a test.
-            </p>
-            <a
-              class="text-link"
-              href="/receiver.rb"
-              download>
-              Download a Rails receiver example ↓
-            </a>
-            <h2>From signal to investigation</h2>
-            <p>
-              Open any advisory to copy a prompt or download its SKILL.md. Run it in your own
-              repository with your preferred agent. The brief asks for installed dependency
-              versions, application-specific evidence, and a proposed fix for your review. It
-              doesn’t authorize production access or automatic changes.
-            </p>
-            <h2>What v1 covers</h2>
-            <p>
-              This feed covers published security advisories in{" "}
-              <a href="https://github.com/rails/rails/security/advisories">rails/rails</a>. It is
-              not a feed of every Ruby gem vulnerability, and it does not assess whether your
-              application is affected. New connections receive future events; historical advisories
-              remain available in the public index.
-            </p>
-            <p>
-              We retain endpoint URLs, encrypted signing secrets, advisory data, and delivery
-              status. We don’t request your source code or store receiver response bodies. Delete a
-              connection to remove its secret and delivery history. Protect your management token
-              like a password; recovery without it is not available in v1.
-            </p>
-            <h2>Retries and availability</h2>
-            <p>
-              Delivery attempts have a 10-second timeout. Failed requests retry with increasing
-              delays, starting at five minutes and stopping after eight attempts. A bounded batch
-              runs each five-minute cycle; high volume can add delay. This is an independent
-              community service, with no delivery-time guarantee. Keep your existing security
-              monitoring.
-            </p>
-            <h2>Open interfaces</h2>
-            <p>
-              The public <a href="/api/advisories">JSON feed</a> exposes the advisory index, and{" "}
-              <code>/api/advisories/:id</code> returns an advisory and investigation brief. Source
-              and sync health are available at <a href="/api/health">/api/health</a>.
-            </p>
-          </div>
-          <a
-            class="button primary"
-            href="/connect">
-            Connect your application →
           </a>
         </div>
       </section>

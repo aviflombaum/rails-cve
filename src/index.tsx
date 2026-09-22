@@ -15,7 +15,15 @@ import { bodyLimit } from "hono/body-limit";
 import { sync, skill, type Advisory } from "./advisories";
 import { drain, send, enqueueTest, type Endpoint } from "./delivery";
 import { token, hash, equal, seal, endpointURL } from "./security";
-import { Home, AdvisoryIndex, Detail, Connect, SecretPage, ErrorPage, Docs } from "./views";
+import { Home, AdvisoryIndex, Detail, Connect, SecretPage, ErrorPage } from "./views";
+import {
+  DocsIndex,
+  DocsEmail,
+  DocsWebhooks,
+  DocsAgents,
+  DocsWorkspace,
+  DocsSelfHost,
+} from "./docs-views";
 import { auth, session, githubEnabled, type App } from "./auth";
 import oauth from "./oauth";
 import workspace, { addresses } from "./workspace";
@@ -151,7 +159,19 @@ app.get("/integrations/:slug", (c) => {
     ? c.html(<IntegrationGuide slug={slug} />)
     : c.notFound();
 });
-app.get("/docs", (c) => c.html(<Docs />));
+app.get("/docs", (c) =>
+  c.html(
+    <DocsIndex
+      webhook={webhookEnabled(c.env)}
+      email={emailEnabled(c.env)}
+    />,
+  ),
+);
+app.get("/docs/email", (c) => c.html(<DocsEmail email={emailEnabled(c.env)} />));
+app.get("/docs/webhooks", (c) => c.html(<DocsWebhooks webhook={webhookEnabled(c.env)} />));
+app.get("/docs/agents", (c) => c.html(<DocsAgents />));
+app.get("/docs/workspace", (c) => c.html(<DocsWorkspace github={githubEnabled(c.env)} />));
+app.get("/docs/self-host", (c) => c.html(<DocsSelfHost />));
 app.get("/examples/cve-2026-66066.json", (c) => {
   c.header("Content-Type", "application/json; charset=utf-8");
   c.header("Content-Disposition", 'attachment; filename="rails-cve-CVE-2026-66066.json"');

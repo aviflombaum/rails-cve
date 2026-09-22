@@ -794,6 +794,35 @@ pre {
 .prose + .button {
   margin-top: 28px;
 }
+.prose ul,
+.prose ol:not(.steps) {
+  padding-left: 22px;
+  color: var(--muted);
+}
+.prose li {
+  margin: 8px 0;
+}
+.prose li strong {
+  color: var(--ink);
+}
+.prose table {
+  margin: 8px 0 20px;
+  font-size: 14px;
+}
+.prose td:first-child code {
+  white-space: nowrap;
+}
+.prose td {
+  vertical-align: top;
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.prose .notice {
+  margin: 16px 0;
+}
+.prose .steps p {
+  color: var(--muted);
+}
 .prose code {
   font-size: 0.85em;
   color: var(--ink);
