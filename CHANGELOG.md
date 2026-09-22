@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recompute subscription readiness after email removal; disable tests and show missing destinations or unavailable delivery providers accurately.
+
 - Require authenticated pinned-IP egress for webhooks; ship a bounded Node gateway and offline tests. Unconfigured deployments hold webhook deliveries without attempts. Provision the separate gateway before upgrading a webhook deployment.
 
 - Replace operator-specific email examples and production validation records with portable documentation.

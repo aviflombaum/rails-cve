@@ -43,3 +43,5 @@ Edit delivery settings to change modes, addresses or URLs. Saved webhook paths a
 - `cancelled`: channel/destination removed or changed before completion.
 
 At-least-once delivery means duplicate messages can occur after uncertain network outcomes. Webhook receivers must persist event IDs. Email and webhook attempts are independent: one successful channel is never resent just because the other fails. Unconfigured email is held without consuming attempts. There is no manual historical replay UI in this release.
+
+Removing a notification address cancels its pending email deliveries and recomputes affected app readiness. Email-only apps, and both-mode apps without a verified webhook, become pending (paused apps stay paused). The dashboard shows **Needs destination** and disables Send test until a replacement is verified and selected. A verified webhook can continue independently. Resume does not create a missing destination. Replacing an address resumes future events; cancelled events are not backfilled. A provider disabled by the operator displays **Delivery unavailable** instead of suggesting working notifications.

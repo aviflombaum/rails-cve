@@ -1312,3 +1312,55 @@ describe("secure webhook egress", () => {
     );
   });
 });
+
+describe("subscription readiness after mailbox removal", () => {
+  it.each([
+    ["email", 0, "active", "pending"],
+    ["both", 0, "active", "pending"],
+    ["both", 1, "active", "active"],
+    ["email", 0, "paused", "paused"],
+  ])(
+    "recomputes %s mode, webhook %s, prior status %s",
+    async (mode, verified, status, expected) => {
+      await endpoint();
+      await verifiedAddress();
+      const mail = mailEnvironment();
+      await bindings.DB.prepare(
+        "UPDATE endpoints SET delivery_mode=?,email_id='email1',webhook_verified=?,status=?",
+      )
+        .bind(mode, verified, status)
+        .run();
+      const response = await request("/settings/email/email1/remove", post({}), mail.env);
+      expect(response.status).toBe(303);
+      expect(await bindings.DB.prepare("SELECT status FROM endpoints").first("status")).toBe(
+        expected,
+      );
+      const html = await (
+        await request("/dashboard", { headers: { Authorization: "Bearer management" } }, mail.env)
+      ).text();
+      if (expected === "pending") expect(html).toContain("Needs destination");
+      if (!verified) {
+        expect(html).toMatch(/disabled[^>]*>\s*Send test/);
+        await request("/endpoints/ep/toggle", post({}), mail.env);
+        if (expected !== "paused") await request("/endpoints/ep/toggle", post({}), mail.env);
+        expect(await bindings.DB.prepare("SELECT status FROM endpoints").first("status")).toBe(
+          "pending",
+        );
+        expect((await request("/endpoints/ep/test", post({}), mail.env)).status).toBe(400);
+        await verifiedAddress();
+        expect(
+          (
+            await request(
+              "/endpoints/ep/settings",
+              post({ name: "Restored", delivery_mode: "email", email_id: "email1" }),
+              mail.env,
+            )
+          ).status,
+        ).toBe(303);
+        expect(await bindings.DB.prepare("SELECT status FROM endpoints").first("status")).toBe(
+          "active",
+        );
+      }
+    },
+  );
+});

@@ -261,10 +261,12 @@ function Preferences({
   endpoint,
   emails,
   email,
+  webhook,
 }: {
   endpoint?: Endpoint;
   emails: EmailAddressRow[];
   email: boolean;
+  webhook: boolean;
 }) {
   const suffix = endpoint?.id || "new";
   return (
@@ -289,8 +291,8 @@ function Preferences({
         ].map(([value, label]) => (
           <option
             value={value}
-            selected={(endpoint?.delivery_mode || "webhook") === value}
-            disabled={value !== "webhook" && !email && endpoint?.delivery_mode !== value}>
+            selected={(endpoint?.delivery_mode || (webhook ? "webhook" : "email")) === value}
+            disabled={(value !== "webhook" && !email) || (value !== "email" && !webhook)}>
             {label}
           </option>
         ))}
@@ -386,93 +388,106 @@ export function Dashboard({
               <a href="/integrations">Connect an OpenClaw or Hermes agent →</a>
             </div>
           )}
-          {endpoints.map((e) => (
-            <article class="endpoint">
-              <div class="section-heading">
-                <h3>{e.name}</h3>
-                <span class={`badge ${e.status}`}>{e.status}</span>
-              </div>
-              <p>
-                <strong>
-                  {e.delivery_mode === "both"
-                    ? "Webhook + email"
-                    : e.delivery_mode === "email"
-                      ? "Email"
-                      : "Webhook"}
-                </strong>
-              </p>
-              {e.delivery_mode !== "email" && (
-                <>
-                  <p class="endpoint-url">{e.url}</p>
-                  <p class="source-note">
-                    Webhook {e.webhook_verified ? "verified" : "awaiting ownership verification"}
-                  </p>
-                </>
-              )}
-              {e.delivery_mode !== "webhook" && (
+          {endpoints.map((e) => {
+            const hasWebhook = e.delivery_mode !== "email" && !!e.webhook_verified;
+            const hasEmail =
+              e.delivery_mode !== "webhook" &&
+              emails.some((m) => m.id === e.email_id && !!m.verified_at);
+            const ready = (hasWebhook && webhook) || (hasEmail && email);
+            const label =
+              e.status === "paused"
+                ? "paused"
+                : !hasWebhook && !hasEmail
+                  ? "Needs destination"
+                  : !ready
+                    ? "Delivery unavailable"
+                    : "active";
+            return (
+              <article class="endpoint">
+                <div class="section-heading">
+                  <h3>{e.name}</h3>
+                  <span class={`badge ${label === "active" ? "active" : "pending"}`}>{label}</span>
+                </div>
                 <p>
-                  {e.email_address || "Select a verified email address"}
-                  {!email && " · Email service unavailable"}
+                  <strong>
+                    {e.delivery_mode === "both"
+                      ? "Webhook + email"
+                      : e.delivery_mode === "email"
+                        ? "Email"
+                        : "Webhook"}
+                  </strong>
                 </p>
-              )}
-              <div class="endpoint-actions">
-                {e.delivery_mode !== "email" && !e.webhook_verified && (
+                {e.delivery_mode !== "email" && (
+                  <>
+                    <p class="endpoint-url">{e.url}</p>
+                    <p class="source-note">
+                      Webhook {e.webhook_verified ? "verified" : "awaiting ownership verification"}
+                    </p>
+                  </>
+                )}
+                {e.delivery_mode !== "webhook" && (
+                  <p>
+                    {e.email_address || "Select a verified email address"}
+                    {!email && " · Email service unavailable"}
+                  </p>
+                )}
+                <div class="endpoint-actions">
+                  {e.delivery_mode !== "email" && !e.webhook_verified && (
+                    <form
+                      method="post"
+                      action={`/endpoints/${e.id}/verify`}>
+                      <button
+                        class="button secondary"
+                        disabled={!webhook}>
+                        Verify webhook
+                      </button>
+                    </form>
+                  )}
                   <form
                     method="post"
-                    action={`/endpoints/${e.id}/verify`}>
+                    action={`/endpoints/${e.id}/test`}>
                     <button
                       class="button secondary"
-                      disabled={!webhook}>
-                      Verify webhook
+                      disabled={e.status !== "active" || !ready}>
+                      Send test
                     </button>
                   </form>
-                )}
-                <form
-                  method="post"
-                  action={`/endpoints/${e.id}/test`}>
-                  <button
-                    class="button secondary"
-                    disabled={
-                      e.status !== "active" ||
-                      (!webhook && (e.delivery_mode === "webhook" || !email || !e.email_id))
-                    }>
-                    Send test
-                  </button>
-                </form>
-                <form
-                  method="post"
-                  action={`/endpoints/${e.id}/toggle`}>
-                  <button class="button secondary">
-                    {e.status === "paused" ? "Resume" : "Pause"}
-                  </button>
-                </form>
-                <a
-                  href={`/events?app=${e.id}`}
-                  class="text-link">
-                  Delivery log →
-                </a>
-              </div>
-              <details class="app-settings">
-                <summary>Edit delivery settings</summary>
-                <form
-                  method="post"
-                  action={`/endpoints/${e.id}/settings`}>
-                  <Preferences
-                    endpoint={e}
-                    emails={emails}
-                    email={email}
-                  />
-                  <button class="button primary">Save app</button>
-                </form>
-                <form
-                  method="post"
-                  action={`/endpoints/${e.id}/delete`}
-                  data-confirm="Delete this app and its delivery history?">
-                  <button class="button ghost">Delete app and history</button>
-                </form>
-              </details>
-            </article>
-          ))}
+                  <form
+                    method="post"
+                    action={`/endpoints/${e.id}/toggle`}>
+                    <button class="button secondary">
+                      {e.status === "paused" ? "Resume" : "Pause"}
+                    </button>
+                  </form>
+                  <a
+                    href={`/events?app=${e.id}`}
+                    class="text-link">
+                    Delivery log →
+                  </a>
+                </div>
+                <details class="app-settings">
+                  <summary>Edit delivery settings</summary>
+                  <form
+                    method="post"
+                    action={`/endpoints/${e.id}/settings`}>
+                    <Preferences
+                      endpoint={e}
+                      emails={emails}
+                      email={email}
+                      webhook={webhook}
+                    />
+                    <button class="button primary">Save app</button>
+                  </form>
+                  <form
+                    method="post"
+                    action={`/endpoints/${e.id}/delete`}
+                    data-confirm="Delete this app and its delivery history?">
+                    <button class="button ghost">Delete app and history</button>
+                  </form>
+                </details>
+              </article>
+            );
+          })}
         </div>
         <aside class="form-panel">
           <h2>Add an app</h2>
@@ -487,10 +502,11 @@ export function Dashboard({
             <Preferences
               emails={emails}
               email={email}
+              webhook={webhook}
             />
             <button
               class="button primary"
-              disabled={endpoints.length >= 10}>
+              disabled={endpoints.length >= 10 || (!email && !webhook)}>
               Subscribe app →
             </button>
           </form>

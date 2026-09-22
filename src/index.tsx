@@ -208,7 +208,7 @@ app.post("/logout", async (c) => {
 });
 app.get("/dashboard", async (c) => {
   const endpoints = await c.env.DB.prepare(
-    "SELECT e.*,m.address AS email_address FROM endpoints e LEFT JOIN email_addresses m ON m.id=e.email_id WHERE e.account_id=? ORDER BY e.created_at DESC",
+    "SELECT e.*,m.address AS email_address FROM endpoints e LEFT JOIN email_addresses m ON m.id=e.email_id AND m.account_id=e.account_id AND m.verified_at IS NOT NULL WHERE e.account_id=? ORDER BY e.created_at DESC",
   )
     .bind(c.get("accountId"))
     .all<Endpoint>();
@@ -407,7 +407,7 @@ app.post("/endpoints/:id/:action", async (c) => {
     message = "Test queued. Refresh shortly to see delivery status.";
   } else if (action === "toggle") {
     await c.env.DB.prepare(
-      "UPDATE endpoints SET status=CASE WHEN status='paused' THEN CASE WHEN delivery_mode='webhook' AND webhook_verified=0 THEN 'pending' ELSE 'active' END ELSE 'paused' END WHERE id=?",
+      "UPDATE endpoints SET status=CASE WHEN status='paused' THEN CASE WHEN (delivery_mode<>'email' AND webhook_verified=1) OR (delivery_mode<>'webhook' AND EXISTS(SELECT 1 FROM email_addresses m WHERE m.id=endpoints.email_id AND m.account_id=endpoints.account_id AND m.verified_at IS NOT NULL)) THEN 'active' ELSE 'pending' END ELSE 'paused' END WHERE id=?",
     )
       .bind(e.id)
       .run();

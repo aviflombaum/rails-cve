@@ -132,10 +132,9 @@ routes.post("/settings/email/:id/remove", async (c) => {
     c.env.DB.prepare(
       "UPDATE deliveries SET status='cancelled',lease=NULL,error='Notification address removed' WHERE email_id=? AND status IN ('pending','retry','sending')",
     ).bind(id),
-    c.env.DB.prepare("UPDATE endpoints SET email_id=NULL WHERE email_id=? AND account_id=?").bind(
-      id,
-      account,
-    ),
+    c.env.DB.prepare(
+      "UPDATE endpoints SET email_id=NULL,status=CASE WHEN status='paused' THEN 'paused' WHEN delivery_mode<>'email' AND webhook_verified=1 THEN 'active' ELSE 'pending' END WHERE email_id=? AND account_id=?",
+    ).bind(id, account),
     c.env.DB.prepare("UPDATE deliveries SET email_id=NULL WHERE email_id=?").bind(id),
     c.env.DB.prepare("DELETE FROM email_addresses WHERE id=? AND account_id=?").bind(id, account),
   ]);
