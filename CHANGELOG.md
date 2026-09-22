@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Rewrite the documentation for Rails developers: a getting-started guide, a coding-agent guide, plain-language workspace, email, webhook, self-hosting and egress guides, and a README organised around the hosted service versus your own deployment.
+- Add a documentation section to the site at `/docs` with pages for email, webhooks (including the example payload), coding agents, workspace, and self-hosting. Pages show a notice when a channel is not configured on the deployment. The `/docs#example-payload` anchor still resolves.
+- Rename the site navigation entry to Docs and link the new pages from the footer, home page, and integrations index.
+
 - Gate CI on full-history redacted secret scanning and dependency advisories, pin action/scanner revisions, and keep private audit reports ignored.
 
 - Add D1 service/account budgets, inventory caps, tenant-aware draining, operator backlog health, bounded retention and proof-protected account deletion. Apply migration 0004 before deploying.

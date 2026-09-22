@@ -7,7 +7,7 @@ Rails CVE is a server-rendered Hono application on Cloudflare Workers. The same 
 | Path | Responsibility |
 | --- | --- |
 | `src/index.tsx` | Routes, authentication, origin/rate-limit checks, handler entry points. |
-| `src/views.tsx`, `src/workspace-views.tsx` | Public pages, social metadata, settings, subscriptions and history. |
+| `src/views.tsx`, `src/workspace-views.tsx`, `src/docs-views.tsx` | Public pages, social metadata, settings, subscriptions, history and the site documentation. |
 | `src/auth.ts`, `src/oauth.ts`, `src/workspace.tsx` | Sessions, GitHub identity flow and tenant-scoped settings/history routes. |
 | `src/fanout.ts`, `src/email.ts`, `src/smtp.ts` | Channel eligibility, verified mailboxes, configurable mail transports. |
 | `src/integration-content.ts`, `src/integration-views.tsx` | Public setup prompts and agent integration pages. |

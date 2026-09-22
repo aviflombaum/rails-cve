@@ -1,6 +1,6 @@
-# GitHub App setup: login now, repository issues later
+# GitHub sign-in: registering a GitHub App
 
-Research checked 2026-09-22. This release implements **GitHub registration, login, and explicit account linking**. It does not install a repository bot, list repositories, or create issues. Those are a separate delivery integration. A user's successful login never implies installation access.
+This page is for operators enabling **Continue with GitHub** on their own deployment. Subscribers do not need it; sign-in is explained in [Your workspace](../accounts.md). Research checked 2026-09-22. This release implements **GitHub registration, login, and explicit account linking**. It does not install a repository bot, list repositories, or create issues. Those are a separate delivery integration. A user's successful login never implies installation access.
 
 ## Create the app for login
 
