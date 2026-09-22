@@ -1,35 +1,31 @@
-# Deploy your own Rails CVE with an agent
+# Deploy with the Cloudflare button or your agent
 
-You can self-host from a checkout today. The agent brief below covers a dedicated Worker, D1, secrets, migrations, source bootstrap, and verification. GitHub login and email sending remain optional; the base service works with management tokens and signed webhooks.
+Two shortcuts for getting your own Rails CVE running. Both end up with the same deployment as the [manual guide](self-hosting.md); read that page if you want to understand each step.
 
-## Is a one-click Cloudflare deployment possible?
-
-Yes. Cloudflare's [Deploy to Cloudflare buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/) can clone a public GitHub/GitLab repository, provision resources including D1, and configure Workers Builds. They support secret declarations in `.env.example` and custom deploy commands. It is a guided setup flow: users still authorize accounts, supply secrets, and choose configuration.
+## The Deploy to Cloudflare button
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/aviflombaum/rails-cve)
 
-Source: [aviflombaum/rails-cve](https://github.com/aviflombaum/rails-cve). The button opens Cloudflare's import flow for this public repository.
+Cloudflare's [deploy buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/) clone a public repository into your GitHub account, provision the resources declared in its Wrangler config, prompt for the secrets listed in `.env.example`, and set up Workers Builds. It is a guided flow: you still choose names, supply secrets, and confirm settings.
 
-## Configure your deployment
+What to do in the flow:
 
-1. Open the button and authorize your own Cloudflare and GitHub accounts. Choose a new repository, Worker name, and dedicated D1 database. Cloudflare's flow can provision resources from the portable Wrangler configuration; do not reuse this project's production resources.
-2. Supply `ENCRYPTION_KEY` and `ADMIN_TOKEN` from `.env.example` as two independently generated random 32-byte hex secrets. Keep a secure backup of the encryption key. Never commit their values to the fork.
-3. Set `vars.APP_URL` in your fork's `wrangler.jsonc` to your final HTTPS origin with no path or trailing slash, for example `https://my-rails-cve.my-subdomain.workers.dev`. Replace the local `http://localhost:8787` default **before running the deployment command**. If the import UI doesn't expose Wrangler vars, edit the cloned repo, then retry the build.
-4. In Workers Builds, use **`bun install --frozen-lockfile`** as the build command and **`bun run deploy:cloudflare`** as the deploy command. Override any auto-detected `bun run deploy`: that command expects the original operator's ignored personal config. `deploy:cloudflare` checks the HTTPS origin, applies remote D1 migrations, and deploys using your fork's public config.
-5. Verify Cloudflare has replaced the placeholder D1 ID with your new database ID before migrations run. If provisioning hasn't completed, create a dedicated database in your account, update the binding ID, then rerun the build. Keep binding name `DB` and the migration directory intact. See [manual self-hosting](self-hosting.md) for the exact resource commands.
-6. Leave GitHub login and outbound email unconfigured initially, or follow the [GitHub App](integrations/github-app.md) and [email](integrations/email.md) guides with your own credentials and sender. Neither is required for management-token accounts and webhook delivery.
-7. Check `/api/health` after the first cron sync, save a workspace recovery token, verify a receiver you control, and send a harmless connection test. The initial import is quiet. A 503 before the first sync is expected.
+1. Authorize your Cloudflare and GitHub accounts. Choose a new repository, Worker name, and a **new** D1 database. Never point at another project's database.
+2. Provide `ENCRYPTION_KEY` and `ADMIN_TOKEN` as two independent random 32-byte hex values. Back up the encryption key. Never commit either.
+3. In your new repository, set `vars.APP_URL` in `wrangler.jsonc` to your final HTTPS origin, for example `https://my-rails-cve.my-subdomain.workers.dev`, with no trailing slash. The deploy script refuses to run while it is still `http://localhost:8787`.
+4. In Workers Builds, set the build command to `bun install --frozen-lockfile` and the deploy command to **`bun run deploy:cloudflare`**. The default `bun run deploy` expects a personal config that your fork does not have. `deploy:cloudflare` checks `APP_URL`, applies remote migrations, and deploys from the tracked config.
+5. Confirm the placeholder D1 ID in `wrangler.jsonc` was replaced with your database's ID before the first build. If not, create a database with `wrangler d1 create`, paste its ID, keep the binding name `DB`, and rerun the build.
+6. Leave email, GitHub sign-in, and webhooks for later, or enable them following the [self-hosting guide](self-hosting.md#5-enable-webhooks).
+7. After the first cron run, check `/api/health`, create a workspace, and save its token. A 503 before the first sync is expected.
 
-The public import link is available now. A complete new-account Cloudflare provisioning run has not been independently exercised; the agent/manual path below provides explicit steps if the import flow needs configuration. CI checks packaging and runtime behavior, not creation of resources in another person's account.
-
-Do not confuse a Workers deployment template with deploying an agent gateway. This service stores notifications, not your application source or model API credentials.
+The button does not provision the [egress gateway](egress.md), so webhook delivery starts disabled and the dashboard says so. Email and GitHub sign-in are also off until you add credentials. A full first-time run of this flow on a fresh account has not been independently verified by the project; if something in the import UI does not match this list, fall back to the manual guide.
 
 ## Copy this prompt to your agent
 
-Use with Codex, Claude Code, OpenClaw, Hermes, or another agent that can inspect the repository and run Wrangler. The prompt asks for missing account choices; it never authorizes touching unrelated accounts or databases.
+Give this to Claude Code, Codex, OpenClaw, Hermes, or any agent that can read the repository and run Wrangler. It asks you for the choices only you can make and never authorizes touching accounts or databases that are not yours. The same prompt is on the site at `/integrations/self-host`.
 
 ```text
-Deploy my own instance of Rails CVE from https://github.com/aviflombaum/rails-cve into MY Cloudflare account. Clone that repository (or use my existing checkout) and follow https://github.com/aviflombaum/rails-cve/blob/main/docs/deploy-with-agent.md. Read AGENTS.md, README.md, docs/self-hosting.md, docs/deploy-with-agent.md and docs/integrations/email.md first. Inspect the checkout and installed tools. Use the existing authenticated Cloudflare session when available; never reuse the original author's credentials or database.
+Deploy my own instance of Rails CVE from https://github.com/aviflombaum/rails-cve into MY Cloudflare account. Clone that repository (or use my existing checkout) and follow https://github.com/aviflombaum/rails-cve/blob/main/docs/deploy-with-agent.md. Read AGENTS.md, README.md, docs/self-hosting.md, docs/deploy-with-agent.md, docs/egress.md and docs/integrations/email.md first. Inspect the checkout and installed tools. Use the existing authenticated Cloudflare session when available; never reuse the original author's credentials or database.
 
 Ask only for missing account/domain choices or external credentials. Do not print secrets or put them in command arguments, tracked files, commits or deployment logs. Use a protected secret store, interactive Wrangler secret input, or an ignored mode-0600 secrets file. Generate independent random 32-byte ENCRYPTION_KEY and ADMIN_TOKEN values; preserve existing keys on upgrades.
 
@@ -43,3 +39,7 @@ For GitHub login, guide me through creating my own GitHub App with callback <APP
 
 Use a receiver I control to verify the signed challenge and send a test; ensure event history records the result without exposing credentials. Do not trigger real advisory investigations or production changes as a smoke test. Finish with my URL, deployed version, database/migration status, secret NAMES only, checks performed, remaining optional setup, estimated resource usage caveats and rollback/backup instructions. Leave the checkout free of tracked credentials.
 ```
+
+## After deployment
+
+Whichever route you took, finish with the [operations guide](operations.md): health checks, backlog monitoring, backups of D1 and the encryption key, and the optional circuit-breaker settings. Then subscribe your own apps following [Getting started](getting-started.md).
