@@ -180,6 +180,31 @@ describe("advisory pipeline", () => {
     ).toBeTruthy();
   });
 });
+describe("canonical source redirects", () => {
+  it("rejects a redirect without following it or replacing known data", async () => {
+    await ingest(bindings, [a]);
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const outgoing = new Request(input, init);
+      expect(outgoing.url).toBe(
+        "https://api.github.com/repos/rails/rails/security-advisories?per_page=100&page=1",
+      );
+      expect(outgoing.redirect).toBe("manual");
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://elsewhere.example/advisories" },
+      });
+    });
+    await expect(sync({ ...bindings, GITHUB_TOKEN: "test-upstream-token" })).rejects.toThrow("302");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(await bindings.DB.prepare("SELECT data FROM advisories").first("data")).toBe(
+      JSON.stringify(a),
+    );
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM events").first("n")).toBe(0);
+    expect(
+      await bindings.DB.prepare("SELECT value FROM state WHERE key='sync_error'").first(),
+    ).toBeTruthy();
+  });
+});
 describe("delivery outbox", () => {
   it("finalizes an expired eighth lease once without another request", async () => {
     const ep = await endpoint();

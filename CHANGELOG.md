@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject canonical advisory API redirects without following targets or forwarding credentials.
+
 - Enforce the eight-attempt ceiling when recovering interrupted delivery leases and record uncertain receipt.
 
 - Override the test emulator’s transitive sharp dependency to patched 0.35.4 while its upstream package remains pinned to the affected release.

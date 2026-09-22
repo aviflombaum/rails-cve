@@ -90,3 +90,5 @@ Deleting a connection removes its secret and delivery history. Current historica
 Email providers are selectable: SMTP via implicit TLS port 465, or Cloudflare EMAIL binding. No outbound email is enabled in the portable config. Missing/disabled mail configuration holds pending email items without burning attempts. Provider acceptance is labeled `accepted`; SMTP/Cloudflare inbox receipts are not tracked.
 
 `/events` paginates 30 rows per page with tenant-scoped app/channel/status filters. `/events/:id` joins through the owning app before exposing immutable payloads or attempt summaries. Migration 0002 retains existing IDs, marks previously active/paused webhooks verified, rebuilds outbox uniqueness per channel and preserves legacy aggregate history.
+
+Canonical API requests use manual redirect handling. Any non-2xx response, including a redirect, fails the sync, retains existing advisory data, and records degraded source health. Redirect targets never receive the optional GitHub token.

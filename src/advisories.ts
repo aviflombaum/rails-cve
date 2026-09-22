@@ -135,6 +135,7 @@ export async function sync(env: Env) {
             "User-Agent": "Rails-CVE/1.0",
             ...(env.GITHUB_TOKEN ? { Authorization: `Bearer ${env.GITHUB_TOKEN}` } : {}),
           },
+          redirect: "manual",
           signal: AbortSignal.timeout(15000),
         },
       );
