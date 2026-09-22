@@ -1,8 +1,10 @@
 # Rails CVE → OpenClaw
 
-Research checked 2026-09-22. This guide targets OpenClaw Gateway HTTP hooks. It describes an adapter your agent builds in your environment; this repository does not ship a managed OpenClaw gateway or a prebuilt receiver adapter.
+Give your OpenClaw agent the prompt below and it builds a small receiver that turns each Rails advisory into a read-only investigation of one codebase. Nothing here is hosted by Rails CVE; the receiver, the gateway, and the agent all run in your environment.
 
-## Topology
+Research checked September 22, 2026 against the [OpenClaw inbound hooks documentation](https://docs.openclaw.ai/automation/cron-jobs/webhooks). Installed versions may differ; the prompt asks the agent to check yours first.
+
+## How it fits together
 
 ```mermaid
 flowchart LR
@@ -10,20 +12,21 @@ flowchart LR
   V --> W[Local dispatch worker]
   W --> O[Loopback OpenClaw gateway]
   O --> C[Configured checkout: read-only investigation]
-  C --> H[Human reviews proposed next step]
+  C --> H[Human reviews the proposed next step]
 ```
 
-Create one Rails CVE app per codebase. Choose webhook or both, point it at the receiver's public HTTPS URL, and store the one-time signing secret on that receiver. Use separate receiver routes/configuration for separate codebases. Rails CVE sends the same advisory event to each app; local routing must be configured explicitly.
+1. In Rails CVE, add one app per codebase in **Webhook** or **Both** mode, pointed at the receiver's public HTTPS URL, and save the signing secret on the receiver.
+2. The receiver verifies Rails CVE's HMAC signature, answers the ownership challenge, stores each event durably, and returns 2xx quickly.
+3. A background worker posts an investigation message to OpenClaw's `/hooks/agent` endpoint on loopback, using a dedicated hook token and an idempotency key.
+4. The agent investigates the configured checkout and reports. You review before anything changes.
 
-OpenClaw's [inbound hook documentation](https://docs.openclaw.ai/automation/cron-jobs/webhooks) describes `/hooks/agent`, a dedicated hook token, agent allowlists, and an idempotency header. The response acknowledges admission, not completion. Its [Webhooks plugin](https://docs.openclaw.ai/plugins/webhooks) manages task records; use Gateway hooks to start agent turns.
+Why not point Rails CVE straight at the gateway? Rails CVE authenticates with HMAC headers and sends an advisory schema; OpenClaw expects its own hook token and a message. The receiver bridges the two and handles the challenge, retries, and deduplication. Gateway admission can also take longer than Rails CVE's ten-second timeout, so the receiver must store first and dispatch asynchronously.
 
-A direct Rails CVE → gateway connection will fail: Rails CVE authenticates using HMAC headers and sends an advisory schema, while OpenClaw expects its hook credential and an agent message. An adapter also handles Rails CVE's signed challenge before any agent work.
-
-The design below is our integration recommendation. Verify supported fields against the installed version. Gateway admission can exceed the sender's ten-second timeout, so durably enqueue before acknowledging Rails CVE and dispatch asynchronously. Keep the gateway private; expose only the verifying receiver. OpenClaw's own controls and OS/container permissions must enforce the requested read-only scope.
+Keep the gateway on loopback and expose only the receiver, for example through a dedicated Cloudflare Tunnel hostname. OpenClaw's own controls and OS permissions enforce the read-only scope; instructions in a prompt do not.
 
 ## Setup prompt
 
-Send the following to your OpenClaw agent from the intended codebase. Replace any unresolved repository/agent choices when asked. Supply credentials through a secret store, not the conversation.
+Send this to your OpenClaw agent from the intended codebase. Supply credentials through a secret store, not the conversation. The same prompt is on the site at `/integrations/openclaw`.
 
 ```text
 Connect this codebase to Rails CVE using my existing OpenClaw setup. First inspect the installed OpenClaw version, selected profile and configured agent; use https://docs.openclaw.ai/automation/cron-jobs/webhooks as the current reference. Ask me for the repository path and target agent only if they cannot be determined safely.

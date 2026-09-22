@@ -1,20 +1,23 @@
 # Rails CVE → Hermes Agent
 
-Research checked 2026-09-22. “Hermes” here means [NousResearch Hermes Agent](https://hermes-agent.nousresearch.com/). This is a recipe for an adapter in your environment, not a hosted integration or a prebuilt adapter shipped by Rails CVE.
+Give your [NousResearch Hermes Agent](https://hermes-agent.nousresearch.com/) the prompt below and it builds a small receiver that turns each Rails advisory into a read-only investigation of one codebase. Nothing here is hosted by Rails CVE; the receiver, the listener, and the agent all run in your environment.
 
-## Topology and prerequisites
+Research checked September 22, 2026 against the [Hermes inbound webhook documentation](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks). Installed versions may differ; the prompt asks the agent to check yours first.
 
-Use a public HTTPS receiver in front of a durable local inbox, a dispatch worker, and a loopback Hermes webhook listener. Configure a fixed local checkout per receiver route. Keep the gateway and filesystem private. In Rails CVE, create an app in webhook or both mode, save its signing secret at the receiver, and complete the ownership challenge.
+## How it fits together
 
-Hermes' [inbound webhook documentation](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks) provides `hermes webhook subscribe`, route secrets, and Generic V2 authentication: a hex HMAC of `timestamp.body` in `X-Webhook-Signature-V2`, paired with `X-Webhook-Timestamp`. The documented route is `/webhooks/<route-name>`. Use `X-Request-ID` for downstream deduplication. Its documented one-hour cache is shorter than Rails CVE's retry window. Default webhook tools are limited; broader tools require an explicit config change.
+1. In Rails CVE, add one app per codebase in **Webhook** or **Both** mode, pointed at the receiver's public HTTPS URL, and save the signing secret on the receiver.
+2. The receiver verifies Rails CVE's HMAC signature, answers the ownership challenge, stores each event durably, and returns 2xx quickly.
+3. A background worker forwards the validated JSON to Hermes' loopback listener at `/webhooks/rails-cve`, signed afresh with the Hermes route secret using its Generic V2 headers, and sets `X-Request-ID` for deduplication.
+4. Hermes runs the route's investigation prompt against the configured checkout. You review before anything changes.
 
-The recipe below is our proposed integration. Rails CVE's headers are not Hermes headers. Verify incoming Rails signatures with the Rails secret, then sign the forwarded bytes afresh using the Hermes route secret. Echo verification challenges locally and keep connection tests from starting agent jobs. Do not simply rename headers and expose the gateway.
+Rails CVE's headers are not Hermes headers, and the two secrets must stay separate: the receiver verifies with the Rails CVE secret, then signs the forwarded bytes with the Hermes route secret. Hermes deduplicates for one hour, which is shorter than Rails CVE's retry window, so the receiver keeps its own event ledger.
 
-A durable receiver ledger is required for restarts and long retry windows. Once a timeout creates uncertainty about admission, reconcile before replaying beyond Hermes' deduplication window. A webhook acknowledgment is not evidence that the investigation completed. Keep repository access read-only through real capability controls; instructions alone are insufficient.
+Webhook routes in Hermes default to a constrained toolset. Granting terminal or file tools is a manual config change; the prompt asks the agent to explain what read-only repository access requires and to request it explicitly.
 
 ## Setup prompt
 
-Send this to your Hermes agent. It should inspect your installed version before choosing config fields or granting tools.
+Send this to your Hermes agent from the intended codebase. Supply credentials through a secret store, not the conversation. The same prompt is on the site at `/integrations/hermes`.
 
 ```text
 Connect this codebase to Rails CVE using my existing NousResearch Hermes Agent setup. Inspect its installed version and selected profile, then consult https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks. Ask for the repository path and intended report destination only if missing.
