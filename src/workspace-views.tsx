@@ -120,6 +120,15 @@ export function Settings({
               <form
                 method="post"
                 action="/auth/github">
+                <label for="link-token">Current management token</label>
+                <input
+                  id="link-token"
+                  name="current_token"
+                  type="password"
+                  autocomplete="off"
+                  maxlength={128}
+                  required
+                />
                 <button class="button secondary">Connect GitHub →</button>
               </form>
             </>
@@ -129,16 +138,53 @@ export function Settings({
           <p class="source-note">
             Sign-in doesn’t install a repository bot or grant this service access to your code.
           </p>
-          <h2 class="panel-subheading">Recovery token</h2>
+          <h2 class="panel-subheading">Secure your account</h2>
           <p>
-            Create a new management token to recover this workspace or authenticate API requests.
-            This replaces your previous management token.
+            Replace your management token and sign out every other device. Review your GitHub link
+            and app destinations if you suspect unauthorized access.
           </p>
+          {github && account.github_id && (
+            <form
+              method="post"
+              action="/auth/github">
+              <input
+                type="hidden"
+                name="purpose"
+                value="recovery"
+              />
+              <button class="button secondary">Confirm identity with GitHub</button>
+            </form>
+          )}
+          {account.recovery_ready ? (
+            <p role="status">
+              GitHub identity confirmed. You can secure this account within five minutes.
+            </p>
+          ) : null}
           <form
             method="post"
             action="/settings/token"
-            data-confirm="Replace your management token? Save the new token before continuing.">
-            <button class="button secondary">Generate recovery token</button>
+            data-confirm="Replace the token and sign out all other devices? Save the new token before continuing.">
+            <label for="current-token">Current management token</label>
+            <input
+              id="current-token"
+              name="current_token"
+              type="password"
+              autocomplete="off"
+              maxlength={128}
+            />
+            <p class="source-note">
+              Enter your saved token, or confirm your linked GitHub identity above.
+            </p>
+            {account.github_id && (
+              <label>
+                <input
+                  type="checkbox"
+                  name="unlink_github"
+                />{" "}
+                Remove the GitHub link ({account.github_login}) too
+              </label>
+            )}
+            <button class="button secondary">Replace token and sign out other devices</button>
           </form>
         </div>
         <div class="form-panel">

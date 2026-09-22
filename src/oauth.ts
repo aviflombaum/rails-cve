@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { currentAccount, githubEnabled, session, type App, type Account } from "./auth";
+import { currentAccount, credential, githubEnabled, session, type App, type Account } from "./auth";
 import { boundedText, hash, token } from "./security";
 const routes = new Hono<App>();
 type FailureStage =
@@ -33,6 +33,19 @@ routes.post("/auth/github", async (c) => {
   if (!githubEnabled(c.env))
     return c.text("GitHub sign-in is not configured on this deployment.", 503);
   const account = await currentAccount(c);
+  const form = await c.req.parseBody();
+  const purpose = form.purpose === "recovery" ? "recovery" : "login";
+  if (account && !account.github_id) {
+    const proof = await hash(String(form.current_token || credential(c)));
+    const permitted = await c.env.DB.prepare(
+      "SELECT id FROM accounts WHERE id=? AND auth_version=? AND token_hash=?",
+    )
+      .bind(account.id, account.auth_version, proof)
+      .first();
+    if (!permitted) return c.text("Enter your current management token to link an identity.", 403);
+  }
+
+  if (purpose === "recovery" && !account?.github_id) return fail("account_changed");
   const state = token(),
     browser = token(),
     verifier = token();
@@ -46,13 +59,15 @@ routes.post("/auth/github", async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare("DELETE FROM oauth_states WHERE expires_at<=?").bind(Date.now()),
     c.env.DB.prepare(
-      "INSERT INTO oauth_states(state_hash,browser_hash,verifier,account_id,expires_at) VALUES(?,?,?,?,?)",
+      "INSERT INTO oauth_states(state_hash,browser_hash,verifier,account_id,expires_at,auth_version,purpose) VALUES(?,?,?,?,?,?,?)",
     ).bind(
       await hash(state),
       await hash(browser),
       verifier,
       account?.id || null,
       Date.now() + 600_000,
+      account?.auth_version || 0,
+      purpose,
     ),
   ]);
   setCookie(c, "rcve_oauth", browser, {
@@ -64,7 +79,7 @@ routes.post("/auth/github", async (c) => {
   });
   // Upgrade legacy SameSite=Strict capability cookies before leaving our origin.
   // Linking still requires the same authenticated account on the callback.
-  if (account) await session(c, account.id);
+  if (account) await session(c, account.id, account.auth_version);
   const url = new URL("https://github.com/login/oauth/authorize");
   url.search = new URLSearchParams({
     client_id: c.env.GITHUB_CLIENT_ID!,
@@ -85,12 +100,21 @@ routes.get("/auth/github/callback", async (c) => {
     "DELETE FROM oauth_states WHERE state_hash=? AND browser_hash=? AND expires_at>? RETURNING *",
   )
     .bind(await hash(state), await hash(browser), Date.now())
-    .first<{ account_id: string | null; verifier: string }>();
+    .first<{
+      account_id: string | null;
+      verifier: string;
+      auth_version: number;
+      purpose: string;
+    }>();
   deleteCookie(c, "rcve_oauth", { path: "/auth/github" });
   if (!row) return fail("state");
   if (!code || code.length > 512 || c.req.query("error")) return fail("authorization");
   const current = await currentAccount(c);
-  if ((row.account_id || null) !== (current?.id || null)) return fail("account_changed");
+  if (
+    (row.account_id || null) !== (current?.id || null) ||
+    (row.account_id && row.auth_version !== current?.auth_version)
+  )
+    return fail("account_changed");
   let stage: FailureStage = "token";
   let operation = "request";
   let providerStatus: number | undefined;
@@ -149,6 +173,8 @@ routes.get("/auth/github/callback", async (c) => {
     let account = await c.env.DB.prepare("SELECT * FROM accounts WHERE github_id=?")
       .bind(githubId)
       .first<Account>();
+    if (row.purpose === "recovery" && current?.github_id !== githubId)
+      return fail("account_changed");
     if (row.account_id) {
       if (
         (account && account.id !== row.account_id) ||
@@ -158,11 +184,12 @@ routes.get("/auth/github/callback", async (c) => {
           "That GitHub identity or workspace is already linked. No accounts were merged.",
           409,
         );
-      await c.env.DB.prepare(
-        "UPDATE accounts SET github_id=?,github_login=? WHERE id=? AND (github_id IS NULL OR github_id=?)",
+      const linked = await c.env.DB.prepare(
+        "UPDATE accounts SET github_id=?,github_login=? WHERE id=? AND (github_id IS NULL OR github_id=?) AND auth_version=?",
       )
-        .bind(githubId, user.login, row.account_id, githubId)
+        .bind(githubId, user.login, row.account_id, githubId, row.auth_version)
         .run();
+      if (!linked.meta.changes) return fail("account_changed");
       account = current;
     } else if (!account) {
       // Conflict-safe concurrent first login. Never merge by email or display name.
@@ -181,9 +208,11 @@ routes.get("/auth/github/callback", async (c) => {
     }
     if (!account) return fail("account");
     stage = "session";
-    await session(c, account.id);
+    await session(c, account.id, account.auth_version, row.purpose === "recovery");
     return c.redirect(
-      "/settings?message=GitHub%20connected.%20Choose%20your%20notification%20preferences.",
+      row.purpose === "recovery"
+        ? "/settings?message=Identity%20confirmed.%20Secure%20your%20account%20within%20five%20minutes."
+        : "/settings?message=GitHub%20connected.%20Choose%20your%20notification%20preferences.",
       303,
     );
   } catch (error) {

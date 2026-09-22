@@ -176,9 +176,9 @@ app.post("/accounts", async (c) => {
 app.post("/session", async (c) => {
   const form = await c.req.parseBody();
   const value = String(form.token || "").trim();
-  const a = await c.env.DB.prepare("SELECT id FROM accounts WHERE token_hash=?")
+  const a = await c.env.DB.prepare("SELECT id,auth_version FROM accounts WHERE token_hash=?")
     .bind(await hash(value))
-    .first<{ id: string }>();
+    .first<{ id: string; auth_version: number }>();
   if (!a)
     return c.html(
       <Connect
@@ -187,7 +187,7 @@ app.post("/session", async (c) => {
       />,
       401,
     );
-  await session(c, a.id);
+  await session(c, a.id, a.auth_version);
   return c.redirect("/settings", 303);
 });
 app.post("/logout", async (c) => {

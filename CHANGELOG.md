@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Secure-account recovery revokes prior sessions and OAuth flows, requires credential proof, and can remove an unexpected GitHub link.
+
 - Fix GitHub sign-in on Workers by using supported manual redirect handling for token exchange and identity lookup; reject redirects without forwarding credentials.
 
 - Refresh legacy browser sessions before GitHub linking and report safe callback failure references for troubleshooting.

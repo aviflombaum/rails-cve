@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { auth, githubEnabled, type App, type Account } from "./auth";
+import { auth, githubEnabled, currentAccount, credential, session, type App } from "./auth";
 import { hash, token } from "./security";
 import { emailEnabled, requestVerification, type EmailAddressRow } from "./email";
 import type { Endpoint } from "./delivery";
@@ -20,9 +20,7 @@ export async function addresses(env: Env, accountId: string) {
   ).results;
 }
 routes.get("/settings", async (c) => {
-  const account = await c.env.DB.prepare("SELECT * FROM accounts WHERE id=?")
-    .bind(c.get("accountId"))
-    .first<Account>();
+  const account = await currentAccount(c);
   return c.html(
     <Settings
       account={account!}
@@ -44,10 +42,43 @@ routes.post("/settings", async (c) => {
   return c.redirect("/settings?message=Settings%20saved.", 303);
 });
 routes.post("/settings/token", async (c) => {
+  const form = await c.req.parseBody();
   const value = token("rcve_");
-  await c.env.DB.prepare("UPDATE accounts SET token_hash=? WHERE id=?")
-    .bind(await hash(value), c.get("accountId"))
-    .run();
+  const proof = String(
+    form.current_token || c.req.header("authorization")?.replace(/^Bearer /, "") || "",
+  );
+  const version = await c.env.DB.prepare(
+    "UPDATE accounts SET token_hash=?,auth_version=auth_version+1,github_id=CASE WHEN ? THEN NULL ELSE github_id END,github_login=CASE WHEN ? THEN NULL ELSE github_login END WHERE id=? AND auth_version=? AND (token_hash=? OR EXISTS(SELECT 1 FROM sessions s WHERE s.account_id=accounts.id AND s.auth_version=accounts.auth_version AND s.token_hash=? AND s.expires_at>? AND s.recovery_until>?)) RETURNING auth_version",
+  )
+    .bind(
+      await hash(value),
+      form.unlink_github === "on" ? 1 : 0,
+      form.unlink_github === "on" ? 1 : 0,
+      c.get("accountId"),
+      c.get("authVersion"),
+      await hash(proof),
+      await hash(credential(c)),
+      Date.now(),
+      Date.now(),
+    )
+    .first<number>("auth_version");
+  if (version === null)
+    return c.html(
+      <ErrorPage message="Enter your current management token or freshly confirm your linked GitHub identity in settings. No credentials were changed." />,
+      403,
+    );
+  // The version switch already revoked old credentials. Cleanup cannot delete a newer session.
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM sessions WHERE account_id=? AND auth_version<?").bind(
+      c.get("accountId"),
+      version,
+    ),
+    c.env.DB.prepare("DELETE FROM oauth_states WHERE account_id=? AND auth_version<?").bind(
+      c.get("accountId"),
+      version,
+    ),
+  ]);
+  await session(c, c.get("accountId"), version);
   return c.html(
     <SecretPage
       title="Save your new recovery token."

@@ -10,7 +10,7 @@ export default defineConfig({
           ENCRYPTION_KEY: "a".repeat(64),
           ADMIN_TOKEN: "test-admin",
           TEST_INITIAL: readFileSync("migrations/0001_initial.sql","utf8"),
-          TEST_UPGRADE: readFileSync("migrations/0002_accounts_channels.sql","utf8"),
+          TEST_UPGRADE: readdirSync("migrations").filter(f=>f.endsWith(".sql") && f!=="0001_initial.sql").sort().map(f=>readFileSync(`migrations/${f}`,"utf8")).join("\n"),
           TEST_MIGRATION: readdirSync("migrations").filter(f=>f.endsWith(".sql")).sort().map(f=>readFileSync(`migrations/${f}`,"utf8")).join("\n"),
         },
       },

@@ -415,7 +415,9 @@ describe("account settings and email", () => {
     });
     expect((await request("/settings", { headers: { cookie } })).status).toBe(302);
     const expired = "expired-session";
-    await bindings.DB.prepare("INSERT INTO sessions VALUES(?,?,?)")
+    await bindings.DB.prepare(
+      "INSERT INTO sessions(token_hash,account_id,expires_at) VALUES(?,?,?)",
+    )
       .bind(await hash(expired), "acct", Date.now() - 1)
       .run();
     expect(
@@ -962,5 +964,109 @@ describe("history and recovery controls", () => {
     expect(
       (await request("/settings", { headers: { authorization: `Bearer ${replacement}` } })).status,
     ).toBe(200);
+  });
+});
+
+describe("secure account recovery", () => {
+  function cookiePost(cookie: string, body: Record<string, string> = {}): RequestInit {
+    return {
+      method: "POST",
+      headers: {
+        cookie,
+        origin: "https://rails-cve.avi.nyc",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "CF-Connecting-IP": `recovery-${++requestNumber}`,
+      },
+      body: new URLSearchParams(body),
+    };
+  }
+  it("requires proof and revokes old capabilities, sessions and pending linking flows", async () => {
+    await endpoint();
+    const login = await request("/session", post({ token: "management" }));
+    const oldCookie = login.headers.get("set-cookie")!.split(";")[0];
+    expect((await request("/auth/github", cookiePost(oldCookie), oauthEnv())).status).toBe(403);
+    const pending = await startOAuth("management");
+    expect((await request("/settings/token", cookiePost(oldCookie))).status).toBe(403);
+    const recovered = await request(
+      "/settings/token",
+      cookiePost(oldCookie, { current_token: "management" }),
+    );
+    expect(recovered.status).toBe(200);
+    const value = (await recovered.text()).match(/rcve_[a-f0-9]{64}/)![0];
+    const newCookie = recovered.headers.get("set-cookie")!.split(";")[0];
+    expect((await request("/settings", { headers: { cookie: oldCookie } })).status).toBe(302);
+    expect((await request("/settings/token", cookiePost(oldCookie))).status).toBe(302);
+    expect((await request("/settings", { headers: { cookie: newCookie } })).status).toBe(200);
+    expect(
+      (await request("/settings", { headers: { authorization: `Bearer ${value}` } })).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(
+          `/auth/github/callback?state=${pending.state}&code=code`,
+          { headers: { cookie: pending.cookie, authorization: `Bearer ${value}` } },
+          oauthEnv(),
+        )
+      ).status,
+    ).toBe(400);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("does not allow a callback already exchanging with GitHub to restore a recovered account", async () => {
+    await endpoint();
+    const flow = await startOAuth("management");
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).includes("access_token")) {
+        expect((await request("/settings/token", post())).status).toBe(200);
+        return Response.json({ access_token: "fixture" });
+      }
+      return Response.json({ id: 1234, login: "octocat" });
+    });
+    expect(
+      (
+        await request(
+          `/auth/github/callback?state=${flow.state}&code=code`,
+          { headers: { cookie: flow.cookie, authorization: "Bearer management" } },
+          oauthEnv(),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      await bindings.DB.prepare("SELECT github_id FROM accounts WHERE id='acct'").first(
+        "github_id",
+      ),
+    ).toBeNull();
+  });
+  it("allows fresh linked-GitHub proof once and removes an unwanted identity", async () => {
+    await endpoint();
+    await bindings.DB.prepare("UPDATE accounts SET github_id='1234',github_login='octocat'").run();
+    const start = await request("/auth/github", post({ purpose: "recovery" }), oauthEnv());
+    const state = new URL(start.headers.get("location")!).searchParams.get("state");
+    const cookies = start.headers
+      .getSetCookie()
+      .map((v) => v.split(";")[0])
+      .join("; ");
+    githubIdentity();
+    const callback = await request(
+      `/auth/github/callback?state=${state}&code=code`,
+      { headers: { cookie: cookies } },
+      oauthEnv(),
+    );
+    const proofCookie = callback.headers
+      .getSetCookie()
+      .find((v) => v.startsWith("rcve_session="))!
+      .split(";")[0];
+    const recovery = await request(
+      "/settings/token",
+      cookiePost(proofCookie, { unlink_github: "on" }),
+    );
+    expect(recovery.status).toBe(200);
+    expect(
+      await bindings.DB.prepare("SELECT github_id FROM accounts WHERE id='acct'").first(
+        "github_id",
+      ),
+    ).toBeNull();
+    expect((await request("/settings/token", cookiePost(proofCookie))).status).toBe(302);
+    const newCookie = recovery.headers.get("set-cookie")!.split(";")[0];
+    expect((await request("/settings/token", cookiePost(newCookie))).status).toBe(403);
   });
 });

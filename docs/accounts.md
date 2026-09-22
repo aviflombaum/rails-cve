@@ -4,9 +4,9 @@
 
 Visit `/connect`. Use GitHub when the operator configured it, or create a workspace with a management token. Save that token immediately; it is shown once. New token accounts continue to settings. Token login and GitHub login also land on settings.
 
-Existing users should restore their token workspace before selecting **Connect GitHub** in settings. An identity already linked elsewhere cannot be merged automatically. GitHub usernames may change; the numeric identity owns the link. Neither login nor linking installs an issue bot.
+Existing users should restore their token workspace before selecting **Connect GitHub** in settings, and enter the saved management token to authorize a new identity link. An identity already linked elsewhere cannot be merged automatically. GitHub usernames may change; the numeric identity owns the link. Neither login nor linking installs an issue bot.
 
-Settings lets you change the display name, replace the recovery/management token, and verify notification addresses. Replacing the token invalidates the old capability. Current expiring browser sessions stay signed in; signing out revokes that browser's session. A legacy browser storing the old capability will need to sign in again after replacement. Accounts created with GitHub can generate a recovery token here as well.
+Settings lets you change the display name, replace the recovery/management token, and verify notification addresses. Securing the account replaces the capability, revokes every previous browser session and pending account-bound OAuth flow, and issues a new session to the recovering browser. Enter your current management token or freshly confirm the already-linked GitHub identity (five-minute, single-use recovery permission). You can remove an unexpected GitHub link at the same time. Review app destinations after a suspected compromise. Signing out alone revokes only that browser’s session. Accounts created with GitHub can generate a recovery token here as well.
 
 ## Verify notification addresses
 

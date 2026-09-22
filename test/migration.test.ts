@@ -38,5 +38,6 @@ it("upgrades existing token workspaces, verified endpoints and delivery records 
         .first("webhook_verified"),
     ).toBe(state === "pending" ? 0 : 1);
   expect(await db.DB.prepare("SELECT token_hash FROM accounts").first("token_hash")).toBe("hash");
+  expect(await db.DB.prepare("SELECT auth_version FROM accounts").first("auth_version")).toBe(0);
   expect((await db.DB.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
 });
