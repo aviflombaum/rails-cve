@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enforce the eight-attempt ceiling when recovering interrupted delivery leases and record uncertain receipt.
+
 - Override the test emulator’s transitive sharp dependency to patched 0.35.4 while its upstream package remains pinned to the affected release.
 
 - Encrypt complete webhook destinations, mask URL credentials in forms, upgrade legacy rows in bounded batches, redact query telemetry and disable destination traces.

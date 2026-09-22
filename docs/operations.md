@@ -55,3 +55,7 @@ Email provider acceptance is not inbox receipt. Monitor your provider's bounce/s
 ## Upgrade and rollback
 
 Back up D1 before applying 0002 and deploy the matching Worker promptly. The migration rebuilds the deliveries table to change uniqueness while preserving IDs and existing history; do not edit 0001. An older Worker does not understand email-only subscriptions or per-channel rows. Do not roll back to the pre-0002 Worker against a database with email channels enabled: restore a compatible database backup and keys together, or roll forward with a fix. Disable cron/fanout during a coordinated rollback if necessary.
+
+### Interrupted final attempts
+
+Eight attempts is a hard dispatch ceiling, including expired delivery leases. An expired eighth lease is finalized as failed without another send. Its history explicitly records that receipt is unknown: the receiver may have accepted the request before the Worker stopped. Reconcile using the stable event ID at the receiver; do not assume failure proves non-delivery. Unexpired leases are left alone.

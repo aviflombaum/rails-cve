@@ -69,8 +69,22 @@ export async function enqueueTest(env: Env, endpoint: Endpoint) {
   return id;
 }
 export async function drain(env: Env) {
+  // Finalize expired last attempts without sending a ninth request. The receiver
+  // may have accepted the interrupted attempt, so never claim non-delivery.
+  const exhausted =
+    "SELECT id FROM deliveries WHERE status IN ('pending','retry','sending') AND attempts>=8 AND next_at<=? ORDER BY id LIMIT 25";
+  const now = Date.now();
+  const interrupted = "Attempt limit reached after interrupted delivery; receipt is unknown";
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO delivery_attempts(id,delivery_id,attempt,status,error) SELECT lower(hex(randomblob(16))),id,attempts,'failed',? FROM deliveries WHERE id IN (${exhausted})`,
+    ).bind(interrupted, now),
+    env.DB.prepare(
+      `UPDATE deliveries SET status='failed',lease=NULL,error=? WHERE id IN (${exhausted})`,
+    ).bind(interrupted, now),
+  ]);
   const { results } = await env.DB.prepare(
-    "SELECT d.id FROM deliveries d JOIN endpoints e ON e.id=d.endpoint_id WHERE d.status IN ('pending','retry','sending') AND d.next_at<=? AND e.status='active' AND (d.channel='webhook' OR ?=1) ORDER BY d.next_at,d.created_at LIMIT 25",
+    "SELECT d.id FROM deliveries d JOIN endpoints e ON e.id=d.endpoint_id WHERE d.status IN ('pending','retry','sending') AND d.attempts<8 AND d.next_at<=? AND e.status='active' AND (d.channel='webhook' OR ?=1) ORDER BY d.next_at,d.created_at LIMIT 25",
   )
     .bind(Date.now(), emailEnabled(env) ? 1 : 0)
     .all<{ id: string }>();
@@ -79,7 +93,7 @@ export async function drain(env: Env) {
       results.slice(i, i + 5).map(async ({ id }) => {
         const lease = crypto.randomUUID();
         const row = await env.DB.prepare(
-          "UPDATE deliveries SET status='sending',lease=?,next_at=?,attempts=attempts+1 WHERE id=? AND status IN ('pending','retry','sending') AND next_at<=? RETURNING *",
+          "UPDATE deliveries SET status='sending',lease=?,next_at=?,attempts=attempts+1 WHERE id=? AND status IN ('pending','retry','sending') AND attempts<8 AND next_at<=? RETURNING *",
         )
           .bind(lease, Date.now() + 120_000, id, Date.now())
           .first<{

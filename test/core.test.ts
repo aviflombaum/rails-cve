@@ -181,6 +181,46 @@ describe("advisory pipeline", () => {
   });
 });
 describe("delivery outbox", () => {
+  it("finalizes an expired eighth lease once without another request", async () => {
+    const ep = await endpoint();
+    await enqueueTest(bindings, ep);
+    await bindings.DB.prepare(
+      "UPDATE deliveries SET status='sending',attempts=8,lease='interrupted',next_at=?",
+    )
+      .bind(Date.now() + 120000)
+      .run();
+    await drain(bindings);
+    expect(await bindings.DB.prepare("SELECT status FROM deliveries").first("status")).toBe(
+      "sending",
+    );
+    await bindings.DB.prepare("UPDATE deliveries SET next_at=0").run();
+    await Promise.all([drain(bindings), drain(bindings)]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(
+      await bindings.DB.prepare("SELECT status,attempts,lease,error FROM deliveries").first(),
+    ).toEqual({
+      status: "failed",
+      attempts: 8,
+      lease: null,
+      error: "Attempt limit reached after interrupted delivery; receipt is unknown",
+    });
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM delivery_attempts").first("n")).toBe(
+      1,
+    );
+  });
+  it("recovers a seventh interrupted lease with exactly one last attempt", async () => {
+    const ep = await endpoint();
+    await enqueueTest(bindings, ep);
+    await bindings.DB.prepare(
+      "UPDATE deliveries SET status='sending',attempts=7,lease='interrupted',next_at=0",
+    ).run();
+    network(204);
+    await Promise.all([drain(bindings), drain(bindings)]);
+    expect(await bindings.DB.prepare("SELECT status,attempts FROM deliveries").first()).toEqual({
+      status: "delivered",
+      attempts: 8,
+    });
+  });
   it("signs a delivery and never follows redirects; retries preserve event identity", async () => {
     const ep = await endpoint();
     const id = await enqueueTest(bindings, ep);
