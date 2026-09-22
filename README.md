@@ -167,7 +167,7 @@ bun run format      # Format application, scripts, and test code
 bunx wrangler deploy --dry-run  # Build/package locally; does not publish
 ```
 
-CI runs these checks on pull requests and pushes to `main` without production credentials. The badge shows the live [GitHub Actions status](https://github.com/aviflombaum/rails-cve/actions/workflows/ci.yml).
+CI runs these checks, dependency auditing, and a redacted full-history secret scan on pull requests, pushes to `main`, and weekly without production credentials. The badge shows the live [GitHub Actions status](https://github.com/aviflombaum/rails-cve/actions/workflows/ci.yml).
 
 | Documentation | What you'll find |
 | :--- | :--- |

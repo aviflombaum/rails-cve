@@ -11,3 +11,6 @@ output/
 wrangler.deploy.jsonc
 wrangler.production.jsonc
 worker-configuration.d.ts
+
+# Private local security audit findings and evidence
+/tmp/security-audit/

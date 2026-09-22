@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Gate CI on full-history redacted secret scanning and dependency advisories, pin action/scanner revisions, and keep private audit reports ignored.
+
 - Add D1 service/account budgets, inventory caps, tenant-aware draining, operator backlog health, bounded retention and proof-protected account deletion. Apply migration 0004 before deploying.
 
 - Recompute subscription readiness after email removal; disable tests and show missing destinations or unavailable delivery providers accurately.

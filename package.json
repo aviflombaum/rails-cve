@@ -14,7 +14,10 @@
     "check": "bun run format:check && bun run typecheck && bun run test && bun run test:egress",
     "format:check": "prettier --check src scripts test/*.ts public/style.css public/app.js egress test/*.mjs",
     "deploy:cloudflare": "bun scripts/deploy-cloudflare.ts",
-    "test:egress": "node --test test/egress.test.mjs"
+    "test:egress": "node --test test/egress.test.mjs",
+    "security:deps": "bun audit",
+    "security:secrets": "gitleaks git --redact=100 --no-banner --ignore-gitleaks-allow --log-opts=\"--all\" .",
+    "security:verify": "bun scripts/test-secret-scan.ts"
   },
   "dependencies": {
     "hono": "^4.13.2",
