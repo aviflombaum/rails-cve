@@ -94,4 +94,4 @@ Typecheck and all 14 runtime tests passed. agent-browser verified desktop/mobile
 
 Fresh production failures isolated the token request. Constructing a real Workers `Request` inside the previously mocked GitHub exchange reproduced the failure: the runtime rejected `redirect: "error"`. Both OAuth fetches now use `manual` and reject non-2xx responses before parsing. Tests construct the actual runtime request for both token exchange and identity lookup, and cover rejected redirects at each stage without forwarding credentials. All 41 tests, formatting and typecheck pass.
 
-A live deliberately invalid-code probe now reaches GitHub and receives its expected HTTP 200 rejection, rather than failing during request construction. No real user code was reused. Full sign-in is awaiting the user's fresh authorization.
+A live deliberately invalid-code probe now reaches GitHub and receives its expected HTTP 200 rejection, rather than failing during request construction. No real user code was reused. The user then completed a fresh GitHub authorization and confirmed account settings loaded successfully. GitHub Actions passed for the pushed fix.
