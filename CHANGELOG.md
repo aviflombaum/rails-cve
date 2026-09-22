@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Require authenticated pinned-IP egress for webhooks; ship a bounded Node gateway and offline tests. Unconfigured deployments hold webhook deliveries without attempts. Provision the separate gateway before upgrading a webhook deployment.
+
 - Replace operator-specific email examples and production validation records with portable documentation.
 
 - Bound complete events to 1 MiB, add explicit compact advisory schema 2, and fail oversized legacy deliveries without retries. Receivers must accept schemas 1 and 2.

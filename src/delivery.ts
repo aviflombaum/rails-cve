@@ -1,8 +1,9 @@
+import { forwardWebhook, webhookEnabled } from "./egress";
 import { MAX_EVENT_BYTES, eventBytes } from "./limits";
 import { readDestination } from "./destinations";
 import { fanout } from "./fanout";
 import { sendAdvisoryEmail, emailEnabled } from "./email";
-import { boundedText, safeDestination, sign, unseal } from "./security";
+import { safeDestination, sign, unseal } from "./security";
 export interface Endpoint {
   id: string;
   account_id: string;
@@ -24,27 +25,20 @@ export async function send(
   id: string,
   challenge = false,
 ) {
+  if (!webhookEnabled(env)) throw new Error("Webhook egress is not configured");
   if (eventBytes(body) > MAX_EVENT_BYTES) throw new Error("Payload exceeds the 1 MiB event limit");
   const destination = await readDestination(endpoint.url, env.ENCRYPTION_KEY);
   await safeDestination(destination);
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = await sign(await unseal(endpoint.secret, env.ENCRYPTION_KEY), timestamp, body);
-  const r = await fetch(destination, {
-    method: "POST",
-    redirect: "manual",
-    signal: AbortSignal.timeout(10000),
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": "Rails-CVE/1.0",
-      "X-Rails-CVE-Id": id,
-      "X-Rails-CVE-Timestamp": timestamp,
-      "X-Rails-CVE-Signature": `v1=${signature}`,
-    },
+  return forwardWebhook(env, {
+    destination,
     body,
+    id,
+    timestamp,
+    signature: `v1=${signature}`,
+    challenge,
   });
-  if (challenge) return { code: r.status, body: await boundedText(r, 4096) };
-  await r.body?.cancel();
-  return { code: r.status, body: "" };
 }
 export async function enqueueTest(env: Env, endpoint: Endpoint) {
   const id = `evt_${crypto.randomUUID()}`,
@@ -86,9 +80,9 @@ export async function drain(env: Env) {
     ).bind(interrupted, now),
   ]);
   const { results } = await env.DB.prepare(
-    "SELECT d.id FROM deliveries d JOIN endpoints e ON e.id=d.endpoint_id WHERE d.status IN ('pending','retry','sending') AND d.attempts<8 AND d.next_at<=? AND e.status='active' AND (d.channel='webhook' OR ?=1) ORDER BY d.next_at,d.created_at LIMIT 25",
+    "SELECT d.id FROM deliveries d JOIN endpoints e ON e.id=d.endpoint_id WHERE d.status IN ('pending','retry','sending') AND d.attempts<8 AND d.next_at<=? AND e.status='active' AND ((d.channel='webhook' AND ?=1) OR (d.channel='email' AND ?=1)) ORDER BY d.next_at,d.created_at LIMIT 25",
   )
-    .bind(Date.now(), emailEnabled(env) ? 1 : 0)
+    .bind(Date.now(), webhookEnabled(env) ? 1 : 0, emailEnabled(env) ? 1 : 0)
     .all<{ id: string }>();
   for (let i = 0; i < results.length; i += 5)
     await Promise.all(

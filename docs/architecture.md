@@ -65,7 +65,7 @@ Notification mailboxes have hashed, expiring confirmation tokens. GET renders a 
 
 Each connection has an independently generated signing secret and a complete destination URL, both AES-GCM-encrypted using a Worker secret. The UI masks destination paths and queries; legacy URL rows are upgraded in bounded scheduled/admin batches. A signed challenge proves endpoint control before activation. Destination validation, timeouts, and redirect rejection apply on every attempt.
 
-Read [SECURITY.md](../SECURITY.md) and [operations](operations.md) for limitations, especially DNS resolution races, key rotation, and recovery. The service never reads subscriber repositories or runs subscriber agents.
+Read [SECURITY.md](../SECURITY.md) and [operations](operations.md) for limitations, including the required [pinned-IP egress gateway](egress.md), key rotation, and recovery. The service never reads subscriber repositories or runs subscriber agents.
 
 ## Database tables
 
@@ -92,3 +92,5 @@ Email providers are selectable: SMTP via implicit TLS port 465, or Cloudflare EM
 `/events` paginates 30 rows per page with tenant-scoped app/channel/status filters. `/events/:id` joins through the owning app before exposing immutable payloads or attempt summaries. Migration 0002 retains existing IDs, marks previously active/paused webhooks verified, rebuilds outbox uniqueness per channel and preserves legacy aggregate history.
 
 Canonical API requests use manual redirect handling. Any non-2xx response, including a redirect, fails the sync, retains existing advisory data, and records degraded source health. Redirect targets never receive the optional GitHub token.
+
+`src/egress.ts` sends authenticated envelopes only to the operator-configured gateway. `egress/gateway.mjs` resolves and validates destinations and pins the HTTPS socket lookup; `test/egress.test.mjs` runs offline Node boundary tests as part of `bun run check`. Missing gateway configuration disables webhook dispatch without consuming queued attempts.

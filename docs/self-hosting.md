@@ -91,6 +91,8 @@ To bootstrap immediately, send a POST to `/api/admin/sync` with a Bearer admin t
 RAILS_CVE_URL=https://security.example.org bun -e 'const { ADMIN_TOKEN } = await Bun.file(".secrets.production.json").json(); const response = await fetch(new URL("/api/admin/sync", process.env.RAILS_CVE_URL), { method: "POST", headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } }); console.log(response.status, await response.text()); if (!response.ok) process.exitCode = 1;'
 ```
 
+Configure the [egress gateway](egress.md) before enabling webhooks. It is a separate Node service; the Worker alone holds webhook deliveries. Set `EGRESS_PROXY_URL` in the private config and upload the independent `EGRESS_PROXY_TOKEN` secret.
+
 Visit your homepage and `/api/health`. Create a workspace, save its management token, and verify a receiver you control. Send a test and confirm a delivered result in the dashboard.
 
 ## Optional login and delivery channels

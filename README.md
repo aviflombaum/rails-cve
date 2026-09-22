@@ -49,7 +49,7 @@ Rails CVE watches the Rails maintainers' published advisories, sends a signed no
 | **Account settings** | GitHub App login or management-token access, explicit account linking, recovery-token rotation, and verified notification addresses. |
 | **Agent setup guides** | Copy/paste prompts for OpenClaw and NousResearch Hermes; signature-verifying receiver recipes and self-hosting instructions. |
 | **Open interfaces** | Public JSON feed, per-advisory API, health endpoint, and a Rails receiver example. |
-| **Self-hostable** | One Worker, one D1 database, static assets, and a cron trigger. |
+| **Self-hostable** | One Worker, D1, static assets and cron; a separate pinned-IP gateway for webhooks. |
 
 <details>
 <summary><strong>Take a look at the application</strong></summary>
@@ -72,7 +72,7 @@ GitHub login and email delivery appear only when their deployment settings are c
 
 ## Deploy your own
 
-Use the **Deploy to Cloudflare** button above or hand the [deployment prompt](docs/deploy-with-agent.md#copy-this-prompt-to-your-agent) to your agent. The guided setup requires your Cloudflare account, two independent secrets, and your final HTTPS `APP_URL`. Set the deploy command to **`bun run deploy:cloudflare`**; the standard deploy command uses a private operator config. Follow the [complete setup steps](docs/deploy-with-agent.md) before the first build. GitHub login and email are optional.
+Use the **Deploy to Cloudflare** button above or hand the [deployment prompt](docs/deploy-with-agent.md#copy-this-prompt-to-your-agent) to your agent. The guided setup requires your Cloudflare account, two independent secrets, and your final HTTPS `APP_URL`. Set the deploy command to **`bun run deploy:cloudflare`**; the standard deploy command uses a private operator config. Follow the [complete setup steps](docs/deploy-with-agent.md) before the first build. GitHub login and email are optional. Webhook delivery requires the [egress gateway](docs/egress.md), which the Cloudflare button does not provision.
 
 ## Run locally
 
@@ -100,6 +100,8 @@ That command calls the real public GitHub advisory API and writes only to local 
 `bun run setup` creates independent local secrets in a gitignored `.dev.vars` file. It never overwrites an existing file. Local cron events must be triggered manually; deployed cron runs every five minutes.
 
 ### Make a connection
+
+First configure the [webhook egress gateway](docs/egress.md). Without it the local site and advisory feed work, but webhook verification and delivery are disabled.
 
 1. Create a workspace and save its management token in your password manager.
 2. Add a public HTTPS webhook URL and save the one-time signing secret.
@@ -146,7 +148,8 @@ flowchart LR
   B --> C[(D1: advisories and durable outbox)]
   C --> M[Verified email with independent retries]
   C --> D[Signed webhook with retries]
-  D --> E[Your verified receiver]
+  D --> P[Gateway: validated and pinned public IP]
+  P --> E[Your verified receiver]
   E --> F[Your agent investigates]
   F --> G[You review and approve]
 ```
@@ -182,7 +185,7 @@ CI runs these checks on pull requests and pushes to `main` without production cr
 
 ## Scope and next steps
 
-V1 covers the **published `rails/rails` advisory feed**, not every Ruby gem or every historical Rails CVE. Delivery is at least once, without ordering guarantees or a delivery-time SLA. Automatic retention, global signup quotas, and seamless signing-key rotation aren't implemented yet. Save a recovery token or link GitHub before losing access. The [operations guide](docs/operations.md) documents these limits and the DNS-validation caveat.
+V1 covers the **published `rails/rails` advisory feed**, not every Ruby gem or every historical Rails CVE. Delivery is at least once, without ordering guarantees or a delivery-time SLA. Automatic retention, global signup quotas, and seamless signing-key rotation aren't implemented yet. Save a recovery token or link GitHub before losing access. The [operations guide](docs/operations.md) documents these limits and the required gateway boundary.
 
 A future **GitHub App** could open or update one issue per advisory in opted-in repositories, including the context and agent prompt. That would let teams use their existing issue-to-agent workflow without building a receiver. **GitHub login ships in this branch; repository installation and issue delivery remain planned.**
 

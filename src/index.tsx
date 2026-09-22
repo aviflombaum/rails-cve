@@ -1,3 +1,4 @@
+import { webhookEnabled } from "./egress";
 import {
   readDestination,
   storeDestination,
@@ -216,6 +217,7 @@ app.get("/dashboard", async (c) => {
       endpoints={await Promise.all(endpoints.results.map((e) => displayEndpoint(c.env, e)))}
       emails={await addresses(c.env, c.get("accountId"))}
       email={emailEnabled(c.env)}
+      webhook={webhookEnabled(c.env)}
       message={c.req.query("message")?.slice(0, 250)}
     />,
   );
@@ -234,6 +236,8 @@ async function preferences(c: import("hono").Context<App>, existing?: Endpoint) 
   if (!["webhook", "email", "both"].includes(mode))
     throw new Error("Choose webhook, email, or both.");
   if (url || mode !== "email") endpointURL(url);
+  if (mode !== "email" && !webhookEnabled(c.env))
+    throw new Error("Webhook delivery is disabled until the operator configures secure egress.");
   if (mode !== "webhook") {
     if (!emailEnabled(c.env))
       throw new Error("Email delivery is not configured on this deployment.");
@@ -340,6 +344,11 @@ app.post("/endpoints/:id/:action", async (c) => {
       );
     return c.redirect("/dashboard?message=Delivery%20settings%20saved.", 303);
   } else if (action === "verify") {
+    if (!webhookEnabled(c.env))
+      return c.html(
+        <ErrorPage message="Webhook delivery is not configured on this deployment." />,
+        503,
+      );
     if (e.webhook_verified || e.delivery_mode === "email" || !e.url)
       return c.redirect("/dashboard", 303);
     try {
@@ -386,7 +395,8 @@ app.post("/endpoints/:id/:action", async (c) => {
             .bind(e.email_id, e.account_id)
             .first()
         : null;
-    const eligibleWebhook = e.delivery_mode !== "email" && e.webhook_verified;
+    const eligibleWebhook =
+      e.delivery_mode !== "email" && e.webhook_verified && webhookEnabled(c.env);
     if (e.status !== "active" || (!eligibleEmail && !eligibleWebhook))
       return c.html(
         <ErrorPage message="Activate this app and verify at least one configured destination before sending a test." />,

@@ -9,11 +9,12 @@
     "test": "vitest run",
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote --config wrangler.deploy.jsonc",
-    "format": "prettier --write src scripts test/*.ts public/style.css public/app.js",
+    "format": "prettier --write src scripts test/*.ts public/style.css public/app.js egress test/*.mjs",
     "setup": "bun scripts/setup.ts",
-    "check": "bun run format:check && bun run typecheck && bun run test",
-    "format:check": "prettier --check src scripts test/*.ts public/style.css public/app.js",
-    "deploy:cloudflare": "bun scripts/deploy-cloudflare.ts"
+    "check": "bun run format:check && bun run typecheck && bun run test && bun run test:egress",
+    "format:check": "prettier --check src scripts test/*.ts public/style.css public/app.js egress test/*.mjs",
+    "deploy:cloudflare": "bun scripts/deploy-cloudflare.ts",
+    "test:egress": "node --test test/egress.test.mjs"
   },
   "dependencies": {
     "hono": "^4.13.2",

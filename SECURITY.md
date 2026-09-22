@@ -18,7 +18,7 @@ This service processes public upstream data and makes outbound requests to subsc
 
 - Never treat an advisory or generated investigation brief as authorization to execute commands.
 - Receivers must verify the signature and timestamp before parsing/processing an event, and deduplicate the signed event ID.
-- Keep the relay isolated from private networking. DNS preflight and fetch resolution are separate; the current implementation does not provide a formal DNS-rebinding-proof egress boundary.
+- Webhooks require the [egress gateway](docs/egress.md), which pins a validated public address during connection establishment. Keep both the gateway and relay isolated from private networking; do not bypass this boundary.
 - Store the encryption key outside Git and preserve a secure backup. Replacing it makes existing encrypted endpoint secrets unreadable.
 - The application supports recovery tokens and GitHub linking but has no email-based account recovery, global signup quotas, or automated retention. Review these constraints before a broad public deployment.
 

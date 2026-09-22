@@ -82,8 +82,33 @@ async function endpoint(status = "active") {
     .bind("ep")
     .first<Endpoint>())!;
 }
-function network(status = 204, privateIP = false, eventId?: string) {
+// An offline gateway adapter keeps receiver-level scenarios independent from the
+// separate gateway transport tests. Every proxy request still checks its wire contract.
+function mockNetwork(handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
   vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input) !== "https://egress.example.net/deliver") return handler(input, init);
+    expect(init?.redirect).toBe("manual");
+    expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${"a".repeat(64)}`);
+    const data = JSON.parse(String(init?.body));
+    const response = await handler(data.destination, {
+      method: "POST",
+      redirect: "manual",
+      body: data.body,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Rails-CVE-Id": data.id,
+        "X-Rails-CVE-Timestamp": data.timestamp,
+        "X-Rails-CVE-Signature": data.signature,
+      },
+    });
+    return Response.json({
+      code: response.status,
+      body: data.challenge ? await response.text() : "",
+    });
+  });
+}
+function network(status = 204, privateIP = false, eventId?: string) {
+  mockNetwork(async (input, init) => {
     const url = new URL(String(input));
     if (url.hostname === "cloudflare-dns.com")
       return Response.json({
@@ -184,7 +209,7 @@ describe("advisory pipeline", () => {
 describe("canonical source redirects", () => {
   it("rejects a redirect without following it or replacing known data", async () => {
     await ingest(bindings, [a]);
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
+    mockNetwork(async (input, init) => {
       const outgoing = new Request(input, init);
       expect(outgoing.url).toBe(
         "https://api.github.com/repos/rails/rails/security-advisories?per_page=100&page=1",
@@ -355,7 +380,7 @@ describe("workspace lifecycle", () => {
   });
   it("activates only when a receiver returns the current challenge", async () => {
     await endpoint("pending");
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
+    mockNetwork(async (input, init) => {
       if (String(input).startsWith("https://cloudflare-dns.com"))
         return Response.json({ Status: 0, Answer: [{ type: 1, data: "93.184.216.34" }] });
       const body = JSON.parse(String(init?.body));
@@ -386,9 +411,7 @@ describe("workspace lifecycle", () => {
     await Promise.all([drain(bindings), drain(bindings)]);
     expect(await bindings.DB.prepare("SELECT attempts FROM deliveries").first("attempts")).toBe(1);
     expect(
-      vi
-        .mocked(fetch)
-        .mock.calls.filter(([url]) => String(url).includes("receiver.example.net/hook")),
+      vi.mocked(fetch).mock.calls.filter(([url]) => String(url) === bindings.EGRESS_PROXY_URL),
     ).toHaveLength(1);
   });
 });
@@ -757,7 +780,7 @@ async function startOAuth(credential?: string) {
   };
 }
 function githubIdentity(id = 1234, login = "octocat") {
-  vi.mocked(fetch).mockImplementation(async (input, init) => {
+  mockNetwork(async (input, init) => {
     if (String(input) === "https://github.com/login/oauth/access_token") {
       const outgoing = new Request(String(input), init);
       expect(outgoing.method).toBe("POST");
@@ -839,7 +862,7 @@ describe("GitHub App identity", () => {
     "rejects %s redirects without forwarding credentials",
     async (redirectStage) => {
       const flow = await startOAuth();
-      vi.mocked(fetch).mockImplementation(async (input, init) => {
+      mockNetwork(async (input, init) => {
         const outgoing = new Request(String(input), init);
         expect(outgoing.redirect).toBe("manual");
         if (redirectStage === "profile" && outgoing.url.endsWith("/access_token"))
@@ -985,7 +1008,7 @@ describe("GitHub App identity", () => {
 describe("concurrent webhook ownership", () => {
   it("does not mark a new URL verified when an older handshake completes", async () => {
     await endpoint("pending");
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
+    mockNetwork(async (input, init) => {
       if (String(input).startsWith("https://cloudflare-dns.com"))
         return Response.json({ Status: 0, Answer: [{ type: 1, data: "93.184.216.34" }] });
       const body = JSON.parse(String(init?.body));
@@ -1081,7 +1104,7 @@ describe("secure account recovery", () => {
   it("does not allow a callback already exchanging with GitHub to restore a recovered account", async () => {
     await endpoint();
     const flow = await startOAuth("management");
-    vi.mocked(fetch).mockImplementation(async (input) => {
+    mockNetwork(async (input) => {
       if (String(input).includes("access_token")) {
         expect((await request("/settings/token", post())).status).toBe(200);
         return Response.json({ access_token: "fixture" });
@@ -1248,5 +1271,44 @@ describe("event byte contract", () => {
       attempts: 1,
       error: "Payload exceeds the 1 MiB event limit; inspect the canonical advisory",
     });
+  });
+});
+
+describe("secure webhook egress", () => {
+  it("holds queued webhooks without spending attempts when egress is unconfigured", async () => {
+    const ep = await endpoint();
+    await enqueueTest(bindings, ep);
+    const disabled = { ...bindings, EGRESS_PROXY_TOKEN: undefined };
+    await drain(disabled);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await bindings.DB.prepare("SELECT attempts FROM deliveries").first("attempts")).toBe(0);
+    expect((await request("/endpoints/ep/test", post({}), disabled)).status).toBe(400);
+    expect((await request("/endpoints/ep/verify", post({}), disabled)).status).toBe(503);
+    const dashboard = await request(
+      "/dashboard",
+      { headers: { Authorization: "Bearer management" } },
+      disabled,
+    );
+    expect(await dashboard.text()).toContain("Webhook delivery is disabled");
+  });
+  it("never follows gateway redirects or leaks credentials to receiver URLs", async () => {
+    const ep = await endpoint();
+    await enqueueTest(bindings, ep);
+    network();
+    const dns = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input).startsWith("https://cloudflare-dns.com/")) return dns(input, init);
+      expect(String(input)).toBe(bindings.EGRESS_PROXY_URL);
+      expect(init?.redirect).toBe("manual");
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://receiver.example.net/leak" },
+      });
+    });
+    await drain(bindings);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(await bindings.DB.prepare("SELECT status FROM deliveries").first("status")).toBe(
+      "retry",
+    );
   });
 });

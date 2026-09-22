@@ -190,12 +190,7 @@ export function Settings({
         <div class="form-panel">
           <h2>Notification addresses</h2>
           <p>Verify an address, then choose it for each app. Up to five addresses per workspace.</p>
-          {!email && (
-            <p class="notice">
-              Email delivery is not configured on this deployment. Verified webhook delivery remains
-              available.
-            </p>
-          )}
+          {!email && <p class="notice">Email delivery is not configured on this deployment.</p>}
           {emails.map((m) => (
             <div class="email-row">
               <strong>{m.address}</strong>
@@ -353,11 +348,13 @@ export function Dashboard({
   endpoints,
   emails,
   email,
+  webhook,
   message,
 }: {
   endpoints: Endpoint[];
   emails: EmailAddressRow[];
   email: boolean;
+  webhook: boolean;
   message?: string;
 }) {
   return (
@@ -365,6 +362,14 @@ export function Dashboard({
       title="Keep your apps in the loop."
       active="/dashboard"
       message={message}>
+      <>
+        {!webhook && (
+          <p class="notice">
+            Webhook delivery is disabled until the operator configures secure egress. Queued webhook
+            deliveries are held without consuming attempts.
+          </p>
+        )}
+      </>
       <p class="lead">One advisory. Every subscribed codebase. Choose where each signal goes.</p>
       <div class="dashboard-grid">
         <div>
@@ -415,7 +420,11 @@ export function Dashboard({
                   <form
                     method="post"
                     action={`/endpoints/${e.id}/verify`}>
-                    <button class="button secondary">Verify webhook</button>
+                    <button
+                      class="button secondary"
+                      disabled={!webhook}>
+                      Verify webhook
+                    </button>
                   </form>
                 )}
                 <form
@@ -423,7 +432,10 @@ export function Dashboard({
                   action={`/endpoints/${e.id}/test`}>
                   <button
                     class="button secondary"
-                    disabled={e.status !== "active"}>
+                    disabled={
+                      e.status !== "active" ||
+                      (!webhook && (e.delivery_mode === "webhook" || !email || !e.email_id))
+                    }>
                     Send test
                   </button>
                 </form>
