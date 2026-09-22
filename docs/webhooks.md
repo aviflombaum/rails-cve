@@ -4,7 +4,7 @@ Connect any receiver you control that can accept a public HTTPS POST. A Rails ap
 
 ## Connect and verify
 
-1. Create a workspace and save the management token. It restores access; there is no recovery service in v1.
+1. Create a workspace with GitHub or a saved management token. Settings can link GitHub or generate a replacement recovery token.
 2. Add a name and endpoint URL. The URL must use HTTPS on port 443, with no embedded credentials or fragment, and resolve only to public addresses.
 3. Save the full `whsec_…` signing secret in your receiver's secret store. It is shown once.
 4. Implement the signature checks below.

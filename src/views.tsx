@@ -567,7 +567,15 @@ export function Detail({ a, prompt }: { a: Advisory; prompt: string }) {
     </Layout>
   );
 }
-export function Connect({ restore = false, error }: { restore?: boolean; error?: string }) {
+export function Connect({
+  restore = false,
+  error,
+  github = false,
+}: {
+  restore?: boolean;
+  error?: string;
+  github?: boolean;
+}) {
   return (
     <Layout
       title={restore ? "Restore access" : "Connect your application"}
@@ -582,17 +590,17 @@ export function Connect({ restore = false, error }: { restore?: boolean; error?:
               <br />a heads-up.
             </h1>
             <p class="lead">
-              Create a private workspace, connect your webhook, and let the next Rails advisory come
-              to you.
+              Create a private workspace, choose webhook or email delivery, and let the next Rails
+              advisory come to you.
             </p>
             <ol class="steps">
               <li>
                 <strong>Create your workspace</strong>
-                <p>Save a private management token. No email required.</p>
+                <p>Use GitHub when available, or save a private management token.</p>
               </li>
               <li>
-                <strong>Verify your endpoint</strong>
-                <p>A short handshake proves you control the destination.</p>
+                <strong>Choose your destinations</strong>
+                <p>Verify your webhook or notification address for each app.</p>
               </li>
               <li>
                 <strong>Receive the next advisory</strong>
@@ -608,6 +616,16 @@ export function Connect({ restore = false, error }: { restore?: boolean; error?:
                 role="alert">
                 {error}
               </p>
+            )}
+            {github && (
+              <form
+                method="post"
+                action="/auth/github">
+                <button class="button primary">Continue with GitHub →</button>
+                <p class="source-note">
+                  Sign in or create an account. No repository installation required.
+                </p>
+              </form>
             )}
             {restore ? (
               <form
@@ -674,7 +692,7 @@ export function SecretPage({
           <p class="lead">
             {endpoint
               ? "Use this signing secret to verify deliveries. It is shown only once."
-              : "Keep this token in your password manager. It is the only way to restore access on another browser."}
+              : "Keep this token in your password manager. Use it to restore access on another browser, or link GitHub from settings."}
           </p>
           <div class="secret-panel">
             <label for="saved-secret">{label}</label>
@@ -699,9 +717,9 @@ export function SecretPage({
             <div class="prose">
               <h2>One handshake before delivery</h2>
               <p>
-                Your endpoint starts pending. When you click Verify in the workspace, we POST a
-                signed <code>endpoint.verification</code> event with a <code>challenge</code> field.
-                Return that value as the plain-text response body with a 2xx status.
+                Your webhook awaits verification. When you click Verify webhook in the workspace, we
+                POST a signed <code>endpoint.verification</code> event with a <code>challenge</code>{" "}
+                field. Return that value as the plain-text response body with a 2xx status.
               </p>
               <p>Configure the secret in your receiver, then verify the connection.</p>
               <a href="/docs#receiver">Receiver example and signing instructions →</a>
@@ -709,216 +727,9 @@ export function SecretPage({
           )}
           <a
             class="button primary"
-            href="/dashboard">
+            href={endpoint ? "/dashboard" : "/settings"}>
             Continue to your workspace →
           </a>
-        </div>
-      </section>
-    </Layout>
-  );
-}
-export interface DeliveryView {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  attempts: number;
-  response_code: number | null;
-  error: string | null;
-  created_at: string;
-}
-export function Dashboard({
-  endpoints,
-  deliveries,
-  message,
-}: {
-  endpoints: Endpoint[];
-  deliveries: DeliveryView[];
-  message?: string;
-}) {
-  return (
-    <Layout
-      title="Your connections"
-      path="/dashboard"
-      active="dashboard">
-      <section class="section">
-        <div class="container">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">YOUR WORKSPACE</p>
-              <h1 class="page-title">Keep your apps in the loop.</h1>
-            </div>
-            <form
-              method="post"
-              action="/logout">
-              <button
-                type="submit"
-                class="button secondary">
-                Sign out
-              </button>
-            </form>
-          </div>
-          {message && (
-            <p
-              role="status"
-              class="notice">
-              {message}
-            </p>
-          )}
-          <div class="dashboard-grid">
-            <div>
-              <h2>Your connections</h2>
-              {!endpoints.length && (
-                <div class="empty">
-                  <h3>Your first signal starts here.</h3>
-                  <p>
-                    Add an HTTPS webhook endpoint. We’ll verify it before sending any advisories.
-                  </p>
-                </div>
-              )}
-              {endpoints.map((e) => (
-                <div class="endpoint">
-                  <div class="section-heading">
-                    <h3>{e.name}</h3>
-                    <span class={`badge ${e.status}`}>{e.status}</span>
-                  </div>
-                  <p class="endpoint-url">{e.url}</p>
-                  <div class="endpoint-actions">
-                    {e.status === "pending" ? (
-                      <form
-                        method="post"
-                        action={`/endpoints/${e.id}/verify`}>
-                        <button
-                          class="button secondary"
-                          type="submit">
-                          Verify endpoint
-                        </button>
-                      </form>
-                    ) : (
-                      <>
-                        <form
-                          method="post"
-                          action={`/endpoints/${e.id}/test`}>
-                          <button
-                            class="button secondary"
-                            type="submit"
-                            disabled={e.status !== "active"}>
-                            Send test
-                          </button>
-                        </form>
-                        <form
-                          method="post"
-                          action={`/endpoints/${e.id}/toggle`}>
-                          <button
-                            class="button secondary"
-                            type="submit">
-                            {e.status === "active" ? "Pause" : "Resume"}
-                          </button>
-                        </form>
-                      </>
-                    )}
-                    <form
-                      method="post"
-                      action={`/endpoints/${e.id}/delete`}
-                      data-confirm="Delete this endpoint and its delivery history?">
-                      <button
-                        class="button ghost"
-                        type="submit">
-                        Delete
-                      </button>
-                    </form>
-                  </div>
-                  {e.status === "pending" && (
-                    <p class="source-note">
-                      Waiting for a signed challenge handshake.{" "}
-                      <a href="/docs#receiver">Receiver setup →</a>
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-            <aside class="form-panel">
-              <h2>Add a connection</h2>
-              <form
-                method="post"
-                action="/endpoints">
-                <label for="name">Application name</label>
-                <input
-                  id="name"
-                  name="name"
-                  placeholder="My Rails app"
-                  required
-                  maxlength={80}
-                />
-                <label for="url">Webhook URL</label>
-                <input
-                  id="url"
-                  name="url"
-                  type="url"
-                  placeholder="https://your-app.com/webhooks/rails-cve"
-                  required
-                  maxlength={2048}
-                />
-                <p class="source-note">
-                  Public HTTPS endpoint. You’ll receive a signing secret to configure in your app.
-                </p>
-                <button
-                  type="submit"
-                  class="button primary"
-                  disabled={endpoints.length >= 10}>
-                  Create connection →
-                </button>
-              </form>
-              <p class="source-note">
-                Up to 10 connections per workspace. New connections receive future advisories and
-                updates.
-              </p>
-            </aside>
-          </div>
-          <section class="delivery-section">
-            <h2>Recent deliveries</h2>
-            {deliveries.length ? (
-              <div class="table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Connection / event</th>
-                      <th>Status</th>
-                      <th>Attempts</th>
-                      <th>Response</th>
-                      <th>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {deliveries.map((d) => (
-                      <tr>
-                        <td>
-                          <strong>{d.name}</strong>
-                          <br />
-                          <code>{d.type}</code>
-                        </td>
-                        <td>
-                          <span class={`badge ${d.status}`}>{d.status}</span>
-                        </td>
-                        <td>{d.attempts}</td>
-                        <td>{d.response_code || d.error || "—"}</td>
-                        <td>{date(d.created_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p class="empty">
-                No deliveries yet. Verify a connection and send a test to see the full round trip.
-              </p>
-            )}
-            <p class="source-note">
-              Retries run every five minutes, with increasing delays. Failed deliveries stop after
-              eight attempts. Paused connections do not receive new events; queued deliveries resume
-              when reactivated.
-            </p>
-          </section>
         </div>
       </section>
     </Layout>
@@ -965,6 +776,9 @@ export function Docs() {
             updated entries to verified endpoints.
           </p>
           <div class="prose">
+            <p>
+              <a href="/integrations">OpenClaw, Hermes, and self-hosting setup prompts →</a>
+            </p>
             <h2>The delivery contract</h2>
             <p>
               Every request is an HTTPS POST with JSON. Events include{" "}

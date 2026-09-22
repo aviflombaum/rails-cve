@@ -1085,3 +1085,88 @@ pre {
   padding-top: 0;
   gap: 16px;
 }
+
+.workspace-tabs {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line, #ddd5cd);
+  padding: 0 0 1rem;
+  margin: 1rem 0 2rem;
+}
+.workspace-tabs a {
+  text-decoration: none;
+  font-weight: 600;
+}
+.workspace-tabs a[aria-current="page"] {
+  color: var(--red, #c71920);
+  text-decoration: underline;
+  text-underline-offset: 1.25rem;
+}
+.panel-subheading {
+  margin-top: 2.5rem;
+}
+.email-row {
+  padding: 1rem 0;
+  border-bottom: 1px solid #ded7cf;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+.app-settings {
+  margin-top: 1.5rem;
+  border-top: 1px solid #ded7cf;
+  padding-top: 1rem;
+}
+.app-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.app-settings form {
+  margin-top: 1rem;
+}
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2rem 0;
+}
+.event-payload {
+  max-height: 42rem;
+  overflow: auto;
+  padding: 1.5rem;
+  background: #211f1e;
+  color: #fff5e9;
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+.delivery-summary {
+  padding: 2rem 0;
+}
+.count {
+  color: #72665e;
+  font-size: 0.9rem;
+}
+.badge.accepted {
+  background: #e4eee4;
+  color: #23613a;
+}
+.integration-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0 4rem;
+}
+@media (max-width: 760px) {
+  .integration-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.section-heading > form {
+  flex-shrink: 0;
+}
+.section-heading > form button {
+  white-space: nowrap;
+}

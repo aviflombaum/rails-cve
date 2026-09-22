@@ -1,3 +1,5 @@
+import { fanout } from "./fanout";
+import { sendAdvisoryEmail, emailEnabled } from "./email";
 import { boundedText, safeDestination, sign, unseal } from "./security";
 export interface Endpoint {
   id: string;
@@ -8,6 +10,10 @@ export interface Endpoint {
   status: string;
   challenge: string;
   created_at: string;
+  delivery_mode: "webhook" | "email" | "both";
+  webhook_verified: number;
+  email_id: string | null;
+  email_address?: string;
 }
 export async function send(
   env: Env,
@@ -56,20 +62,15 @@ export async function enqueueTest(env: Env, endpoint: Endpoint) {
       }),
       now,
     ),
-    env.DB.prepare("INSERT INTO deliveries(id,event_id,endpoint_id) VALUES(?,?,?)").bind(
-      crypto.randomUUID(),
-      id,
-      endpoint.id,
-    ),
+    fanout(env, id, endpoint.id),
   ]);
   return id;
 }
 export async function drain(env: Env) {
-  const now = Date.now();
   const { results } = await env.DB.prepare(
-    "SELECT d.id FROM deliveries d JOIN endpoints e ON e.id=d.endpoint_id WHERE d.status IN ('pending','retry','sending') AND d.next_at<=? AND e.status='active' ORDER BY d.next_at,d.created_at LIMIT 25",
+    "SELECT d.id FROM deliveries d JOIN endpoints e ON e.id=d.endpoint_id WHERE d.status IN ('pending','retry','sending') AND d.next_at<=? AND e.status='active' AND (d.channel='webhook' OR ?=1) ORDER BY d.next_at,d.created_at LIMIT 25",
   )
-    .bind(now)
+    .bind(Date.now(), emailEnabled(env) ? 1 : 0)
     .all<{ id: string }>();
   for (let i = 0; i < results.length; i += 5)
     await Promise.all(
@@ -79,14 +80,40 @@ export async function drain(env: Env) {
           "UPDATE deliveries SET status='sending',lease=?,next_at=?,attempts=attempts+1 WHERE id=? AND status IN ('pending','retry','sending') AND next_at<=? RETURNING *",
         )
           .bind(lease, Date.now() + 120_000, id, Date.now())
-          .first<{ event_id: string; endpoint_id: string; attempts: number }>();
+          .first<{
+            event_id: string;
+            endpoint_id: string;
+            channel: string;
+            email_id: string | null;
+            attempts: number;
+          }>();
         if (!row) return;
         const endpoint = await env.DB.prepare("SELECT * FROM endpoints WHERE id=?")
           .bind(row.endpoint_id)
           .first<Endpoint>();
         if (!endpoint || endpoint.status !== "active") {
           await env.DB.prepare(
-            "UPDATE deliveries SET status='retry',next_at=0 WHERE id=? AND lease=?",
+            "UPDATE deliveries SET status='retry',next_at=0,lease=NULL,attempts=attempts-1 WHERE id=? AND lease=?",
+          )
+            .bind(id, lease)
+            .run();
+          return;
+        }
+        const email =
+          row.channel === "email"
+            ? await env.DB.prepare(
+                "SELECT address FROM email_addresses WHERE id=? AND account_id=? AND verified_at IS NOT NULL",
+              )
+                .bind(row.email_id, endpoint.account_id)
+                .first<{ address: string }>()
+            : null;
+        const enabled =
+          row.channel === "webhook"
+            ? endpoint.delivery_mode !== "email" && endpoint.webhook_verified === 1
+            : endpoint.delivery_mode !== "webhook" && email && endpoint.email_id === row.email_id;
+        if (!enabled) {
+          await env.DB.prepare(
+            "UPDATE deliveries SET status='cancelled',lease=NULL,error='Destination or channel is no longer enabled',attempts=attempts-1 WHERE id=? AND lease=?",
           )
             .bind(id, lease)
             .run();
@@ -96,31 +123,58 @@ export async function drain(env: Env) {
           .bind(row.event_id)
           .first<{ payload: string }>();
         let code: number | null = null,
-          error: string | null = null;
+          error: string | null = null,
+          providerId: string | null = null;
         try {
           if (!event) throw new Error("Missing event");
-          code = (await send(env, endpoint, event.payload, row.event_id)).code;
-          if (code < 200 || code >= 300) error = `HTTP ${code}`;
+          if (row.channel === "email") {
+            providerId = (
+              await sendAdvisoryEmail(
+                env,
+                email!.address,
+                endpoint.name,
+                row.event_id,
+                event.payload,
+              )
+            ).messageId;
+          } else {
+            code = (await send(env, endpoint, event.payload, row.event_id)).code;
+            if (code < 200 || code >= 300) error = `HTTP ${code}`;
+          }
         } catch {
-          error = "Connection, DNS, or destination validation failed";
+          error =
+            row.channel === "email"
+              ? "Email provider did not confirm acceptance"
+              : "Connection, DNS, or destination validation failed";
         }
-        const status = !error ? "delivered" : row.attempts >= 8 ? "failed" : "retry";
-        await env.DB.prepare(
-          "UPDATE deliveries SET status=?,response_code=?,error=?,next_at=?,lease=NULL WHERE id=? AND lease=?",
-        )
-          .bind(
+        const status = !error
+          ? row.channel === "email"
+            ? "accepted"
+            : "delivered"
+          : row.attempts >= 8
+            ? "failed"
+            : "retry";
+        await env.DB.batch([
+          env.DB.prepare(
+            "INSERT INTO delivery_attempts(id,delivery_id,attempt,status,response_code,error) SELECT ?,id,?,?,?,? FROM deliveries WHERE id=? AND lease=? AND status='sending'",
+          ).bind(crypto.randomUUID(), row.attempts, status, code, error, id, lease),
+          env.DB.prepare(
+            "UPDATE deliveries SET status=?,response_code=?,error=?,provider_id=?,next_at=?,lease=NULL WHERE id=? AND lease=? AND status='sending'",
+          ).bind(
             status,
             code,
             error,
+            providerId,
             Date.now() + Math.min(86_400_000, 300_000 * 2 ** (row.attempts - 1)),
             id,
             lease,
-          )
-          .run();
+          ),
+        ]);
         console.log(
           JSON.stringify({
             event: "delivery_attempt",
             delivery_id: id,
+            channel: row.channel,
             status,
             attempt: row.attempts,
             code,

@@ -2,6 +2,8 @@
 
 This guide deploys the relay to **your own** Cloudflare account. Local development requires no account; follow the README first. Hosting may incur Cloudflare usage charges.
 
+For a copy/paste deployment brief and Cloudflare deploy-button research, see [Deploy with your agent](deploy-with-agent.md). A public repository URL is required for the button flow.
+
 ## 1. Prepare a deployment config
 
 Install dependencies and authenticate:
@@ -88,6 +90,14 @@ RAILS_CVE_URL=https://security.example.org bun -e 'const { ADMIN_TOKEN } = await
 ```
 
 Visit your homepage and `/api/health`. Create a workspace, save its management token, and verify a receiver you control. Send a test and confirm a delivered result in the dashboard.
+
+## Optional login and delivery channels
+
+- [GitHub App login](integrations/github-app.md): configure your own Client ID and client secret, with callback `<APP_URL>/auth/github/callback`. No repository permissions are needed for login.
+- [Email notifications](integrations/email.md): choose SMTP on TLS port 465 or a Cloudflare EMAIL binding, configure your authorized sender, and save credentials as Worker secrets. Users then verify addresses in settings and select per-app modes.
+- [Account workflow](accounts.md): linking existing workspaces, recovery tokens, subscription settings and history.
+
+Both integrations are disabled without their configuration. Tests mock providers and never send mail. Use separate development credentials, not production SMTP or GitHub secrets.
 
 ## 5. Operate it
 

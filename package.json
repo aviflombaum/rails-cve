@@ -12,7 +12,8 @@
     "format": "prettier --write src scripts test/*.ts public/style.css public/app.js",
     "setup": "bun scripts/setup.ts",
     "check": "bun run format:check && bun run typecheck && bun run test",
-    "format:check": "prettier --check src scripts test/*.ts public/style.css public/app.js"
+    "format:check": "prettier --check src scripts test/*.ts public/style.css public/app.js",
+    "deploy:cloudflare": "bun scripts/deploy-cloudflare.ts"
   },
   "dependencies": {
     "hono": "^4.13.2",

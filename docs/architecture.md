@@ -7,7 +7,10 @@ Rails CVE is a server-rendered Hono application on Cloudflare Workers. The same 
 | Path | Responsibility |
 | --- | --- |
 | `src/index.tsx` | Routes, authentication, origin/rate-limit checks, handler entry points. |
-| `src/views.tsx` | Server-rendered pages and social metadata. |
+| `src/views.tsx`, `src/workspace-views.tsx` | Public pages, social metadata, settings, subscriptions and history. |
+| `src/auth.ts`, `src/oauth.ts`, `src/workspace.tsx` | Sessions, GitHub identity flow and tenant-scoped settings/history routes. |
+| `src/fanout.ts`, `src/email.ts`, `src/smtp.ts` | Channel eligibility, verified mailboxes, configurable mail transports. |
+| `src/integration-content.ts`, `src/integration-views.tsx` | Public setup prompts and agent integration pages. |
 | `src/advisories.ts` | Upstream validation, normalization, prompts, payload construction, ingestion and sync. |
 | `src/delivery.ts` | Destination dispatch, test events, leases, attempt recording and retries. |
 | `src/security.ts` | Tokens, hashing, HMAC, encryption, URL/DNS checks and bounded reads. |
@@ -39,7 +42,10 @@ stateDiagram-v2
   [*] --> pending
   pending --> sending: atomic lease
   retry --> sending: due and endpoint active
-  sending --> delivered: receiver returns 2xx
+  sending --> delivered: webhook receiver returns 2xx
+  sending --> accepted: email provider accepts
+  pending --> cancelled: channel or destination removed
+  retry --> cancelled: channel or destination removed
   sending --> retry: failure and attempts remain
   sending --> failed: eighth failed attempt
   sending --> sending: expired lease recovered
@@ -51,7 +57,11 @@ D1's outbox avoids losing an event between database commit and queue publication
 
 ## Ownership and credentials
 
-A workspace is identified by a random 256-bit management capability. D1 stores only its SHA-256 hash. Browsers use an HttpOnly, SameSite=Strict cookie, marked Secure on HTTPS. POSTs enforce same-origin checks unless using an Authorization header; private routes still authenticate the supplied credential. Writes are rate-limited per IP.
+Existing workspaces retain their random 256-bit management capability, stored as a SHA-256 hash. GitHub App sign-in identifies a user by their stable numeric GitHub ID, never email matching. Linking must start and finish in the same authenticated workspace. Single-use ten-minute state is bound to a separate browser cookie; PKCE protects the code exchange. Provider tokens are used once for `/user`, then discarded.
+
+New browser logins create independently hashed, expiring 30-day session tokens, revoked on logout. Cookies are HttpOnly, SameSite=Lax (required for the cross-site GitHub callback) and Secure on HTTPS. POSTs enforce same-origin checks or require explicit Authorization authentication on private routes; invalid Authorization never falls back to the cookie. Legacy capability cookies and bearer tokens remain compatible. Settings can replace a management token while keeping current browser sessions.
+
+Notification mailboxes have hashed, expiring confirmation tokens. GET renders a confirmation form; authenticated POST consumes the token for the requesting account. Verification never changes login identity. Per-destination cooldown and per-account caps bound verification abuse.
 
 Each connection has an independently generated signing secret, AES-GCM-encrypted using a Worker secret. A signed challenge proves endpoint control before activation. Destination validation, timeouts, and redirect rejection apply on every attempt.
 
@@ -61,11 +71,22 @@ Read [SECURITY.md](../SECURITY.md) and [operations](operations.md) for limitatio
 
 | Table | Purpose |
 | --- | --- |
-| `accounts` | Workspace identity and management-token hash. |
-| `endpoints` | Tenant-owned destinations, encrypted secrets, status and challenge. |
+| `accounts` | Workspace profile, optional unique GitHub identity and management-token hash. |
+| `sessions`, `oauth_states` | Expiring browser sessions and single-use browser-bound OAuth state. |
+| `email_addresses`, `email_cooldowns` | Verified account-owned mailboxes and destination verification throttling. |
+| `endpoints` | Historical table name for app subscriptions: channel mode, mail address, webhook URL/ownership and encrypted secret. |
 | `advisories` | Latest normalized upstream snapshots. |
 | `events` | Immutable revision payloads and explicit test events. |
-| `deliveries` | One endpoint/event pair, status, attempts, lease and last result. |
+| `deliveries` | One app/event/channel tuple, email destination identity, status, attempts, lease and last result. |
+| `delivery_attempts` | Completed attempt summaries; no receiver bodies or raw provider errors. |
 | `state` | Baseline marker, sync lease and source health. |
 
 Deleting a connection removes its secret and delivery history. Current historical advisory/event records have no automatic retention policy. Database evolution uses additive numbered migrations; deployments must account for data and code compatibility separately.
+
+## Per-app channels
+
+`fanout()` runs inside the advisory transaction. It inserts a webhook item only for a verified webhook in webhook/both mode, and an email item only for a verified account-owned address in email/both mode. An active both-mode app can receive mail while its webhook awaits verification. Each channel leases and retries independently; success never requeues the other channel. Channel disabling or destination changes cancel queued obsolete items; in-flight requests cannot be recalled. Pausing excludes new fanout and holds queued deliveries until resume.
+
+Email providers are selectable: SMTP via implicit TLS port 465, or Cloudflare EMAIL binding. No outbound email is enabled in the portable config. Missing/disabled mail configuration holds pending email items without burning attempts. Provider acceptance is labeled `accepted`; SMTP/Cloudflare inbox receipts are not tracked.
+
+`/events` paginates 30 rows per page with tenant-scoped app/channel/status filters. `/events/:id` joins through the owning app before exposing immutable payloads or attempt summaries. Migration 0002 retains existing IDs, marks previously active/paused webhooks verified, rebuilds outbox uniqueness per channel and preserves legacy aggregate history.

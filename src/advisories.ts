@@ -1,3 +1,4 @@
+import { fanout } from "./fanout";
 import { boundedText, hash } from "./security";
 export interface Advisory {
   id: string;
@@ -108,11 +109,7 @@ export async function ingest(env: Env, list: Advisory[]) {
           "INSERT OR IGNORE INTO events(id,advisory_id,revision,type,payload,created_at) VALUES(?,?,?,?,?,?)",
         ).bind(id, a.id, revision, type, payload, now),
       );
-      statements.push(
-        env.DB.prepare(
-          "INSERT OR IGNORE INTO deliveries(id,event_id,endpoint_id) SELECT lower(hex(randomblob(16))),?,id FROM endpoints WHERE status='active'",
-        ).bind(id),
-      );
+      statements.push(fanout(env, id));
     }
     await env.DB.batch(statements);
   }

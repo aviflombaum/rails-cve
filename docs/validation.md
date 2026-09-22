@@ -60,3 +60,14 @@ Typecheck and all 14 runtime tests passed. agent-browser verified desktop/mobile
 - GitHub Actions and issue-template YAML parsed successfully; relative Markdown links resolved.
 - Rendered the README as GitHub-flavored Markdown and inspected it with agent-browser. Banner, screenshot, and all six badges loaded.
 - Gitleaks passed for the previous Git history and an isolated public file tree. No production credentials were used for CI checks. The GitHub-hosted workflow itself has not run before publication.
+
+## Accounts and integrations branch — 2026-09-22
+
+- Added AGENTS.md before implementation and recorded the granular plan in `docs/plans/003-accounts-and-integrations.md`. Work is isolated on `feat/accounts-agent-integrations`.
+- Formatting, generated types, TypeScript and 37 offline Workers-runtime tests passed. Coverage includes browser session revocation, GitHub PKCE/state/replay/browser binding/link conflicts, verified mailboxes, foreign-account rejection, independent channel retries, address removal, history pagination, token replacement and a stale-handshake/changed-URL race.
+- A migration regression test upgrades populated 0001 data and verifies account hashes, endpoint IDs, verified/paused/pending states, delivery IDs/counts/results and foreign-key integrity. Both migrations also applied to local D1 through Wrangler.
+- SMTP tests simulate the TLS socket protocol, multiline replies, final acceptance, error redaction, parser bounds, MIME alternatives and header injection rejection. No real email was sent. Cloudflare email acceptance/failure is mocked independently from webhooks.
+- Worker deployment dry-run passed (approximately 275 KiB uncompressed / 66 KiB gzip). No new dependencies were required.
+- agent-browser exercised local signup → settings, display-name save, app creation, pending webhook status, empty and populated delivery log, immutable CVE payload details, integration navigation and clipboard copying. Desktop and 390px mobile screenshots inspected; app/detail/prompt pages have no horizontal document overflow. Private screenshots and fixture data remain ignored.
+- Relative documentation links resolve. Gitleaks passed an isolated candidate public tree; real SMTP credentials and deployment configuration remain ignored, outside the candidate tree.
+- Production was not changed by this branch. GitHub consent/callbacks need a real registered App and credentials; actual SMTP inbox delivery and agent runtime admission remain unverified. OpenClaw/Hermes docs are researched setup recipes, not claims that gateways were installed or contacted. The Cloudflare button flow needs publication and a separate fresh-account test.

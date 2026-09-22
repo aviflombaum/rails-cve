@@ -1,23 +1,18 @@
+import { IntegrationIndex, IntegrationGuide } from "./integration-views";
 import { Hono } from "hono";
 import { contextStorage } from "hono/context-storage";
 import { examplePayload } from "./examples";
-import { getCookie, setCookie, deleteCookie } from "hono/cookie";
+import { getCookie, deleteCookie } from "hono/cookie";
 import { bodyLimit } from "hono/body-limit";
 import { sync, skill, type Advisory } from "./advisories";
 import { drain, send, enqueueTest, type Endpoint } from "./delivery";
 import { token, hash, equal, seal, endpointURL } from "./security";
-import {
-  Home,
-  AdvisoryIndex,
-  Detail,
-  Connect,
-  SecretPage,
-  Dashboard,
-  ErrorPage,
-  Docs,
-  type DeliveryView,
-} from "./views";
-type App = { Bindings: Env; Variables: { accountId: string } };
+import { Home, AdvisoryIndex, Detail, Connect, SecretPage, ErrorPage, Docs } from "./views";
+import { auth, session, githubEnabled, type App } from "./auth";
+import oauth from "./oauth";
+import workspace, { addresses } from "./workspace";
+import { Dashboard } from "./workspace-views";
+import { emailEnabled } from "./email";
 const app = new Hono<App>();
 app.use("*", contextStorage());
 app.use("*", async (c, next) => {
@@ -26,7 +21,7 @@ app.use("*", async (c, next) => {
   c.header("Referrer-Policy", "same-origin");
   c.header(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://github.com",
   );
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   c.header("Cache-Control", "no-store");
@@ -47,27 +42,6 @@ app.use("*", async (c, next) => {
 app.use("/dashboard", auth);
 app.use("/endpoints/*", auth);
 app.use("/endpoints", auth);
-async function auth(c: import("hono").Context<App>, next: import("hono").Next) {
-  const credential =
-    c.req.header("authorization")?.replace(/^Bearer /, "") || getCookie(c, "rcve_session");
-  const a = credential
-    ? await c.env.DB.prepare("SELECT id FROM accounts WHERE token_hash=?")
-        .bind(await hash(credential))
-        .first<{ id: string }>()
-    : null;
-  if (!a) return c.redirect("/login");
-  c.set("accountId", a.id);
-  await next();
-}
-function session(c: import("hono").Context<App>, value: string) {
-  setCookie(c, "rcve_session", value, {
-    httpOnly: true,
-    secure: new URL(c.req.url).protocol === "https:",
-    sameSite: "Strict",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
-}
 async function list(env: Env) {
   const { results } = await env.DB.prepare(
     "SELECT data FROM advisories ORDER BY published_at DESC",
@@ -162,21 +136,35 @@ app.get("/api/health", async (c) => {
     ok ? 200 : 503,
   );
 });
+app.get("/integrations", (c) => c.html(<IntegrationIndex />));
+app.get("/integrations/:slug", (c) => {
+  const slug = c.req.param("slug");
+  return slug === "openclaw" || slug === "hermes" || slug === "self-host"
+    ? c.html(<IntegrationGuide slug={slug} />)
+    : c.notFound();
+});
 app.get("/docs", (c) => c.html(<Docs />));
 app.get("/examples/cve-2026-66066.json", (c) => {
   c.header("Content-Type", "application/json; charset=utf-8");
   c.header("Content-Disposition", 'attachment; filename="rails-cve-CVE-2026-66066.json"');
   return c.body(JSON.stringify(examplePayload(c.env.APP_URL), null, 2) + "\n");
 });
-app.get("/connect", (c) => c.html(<Connect />));
-app.get("/login", (c) => c.html(<Connect restore />));
+app.get("/connect", (c) => c.html(<Connect github={githubEnabled(c.env)} />));
+app.get("/login", (c) =>
+  c.html(
+    <Connect
+      restore
+      github={githubEnabled(c.env)}
+    />,
+  ),
+);
 app.post("/accounts", async (c) => {
   const value = token("rcve_");
   const id = crypto.randomUUID();
   await c.env.DB.prepare("INSERT INTO accounts(id,token_hash) VALUES(?,?)")
     .bind(id, await hash(value))
     .run();
-  session(c, value);
+  await session(c, id);
   return c.html(
     <SecretPage
       title="Your workspace is ready."
@@ -190,7 +178,7 @@ app.post("/session", async (c) => {
   const value = String(form.token || "").trim();
   const a = await c.env.DB.prepare("SELECT id FROM accounts WHERE token_hash=?")
     .bind(await hash(value))
-    .first();
+    .first<{ id: string }>();
   if (!a)
     return c.html(
       <Connect
@@ -199,47 +187,67 @@ app.post("/session", async (c) => {
       />,
       401,
     );
-  session(c, value);
-  return c.redirect("/dashboard", 303);
+  await session(c, a.id);
+  return c.redirect("/settings", 303);
 });
-app.post("/logout", (c) => {
+app.post("/logout", async (c) => {
+  const credential = getCookie(c, "rcve_session");
+  if (credential)
+    await c.env.DB.prepare("DELETE FROM sessions WHERE token_hash=?")
+      .bind(await hash(credential))
+      .run();
   deleteCookie(c, "rcve_session", { path: "/" });
   return c.redirect("/", 303);
 });
 app.get("/dashboard", async (c) => {
-  const [endpoints, deliveries] = await Promise.all([
-    c.env.DB.prepare("SELECT * FROM endpoints WHERE account_id=? ORDER BY created_at DESC")
-      .bind(c.get("accountId"))
-      .all<Endpoint>(),
-    c.env.DB.prepare(
-      "SELECT d.*,e.name,v.type FROM deliveries d JOIN endpoints e ON e.id=d.endpoint_id JOIN events v ON v.id=d.event_id WHERE e.account_id=? ORDER BY d.created_at DESC LIMIT 30",
-    )
-      .bind(c.get("accountId"))
-      .all<DeliveryView>(),
-  ]);
+  const endpoints = await c.env.DB.prepare(
+    "SELECT e.*,m.address AS email_address FROM endpoints e LEFT JOIN email_addresses m ON m.id=e.email_id WHERE e.account_id=? ORDER BY e.created_at DESC",
+  )
+    .bind(c.get("accountId"))
+    .all<Endpoint>();
   return c.html(
     <Dashboard
       endpoints={endpoints.results}
-      deliveries={deliveries.results}
+      emails={await addresses(c.env, c.get("accountId"))}
+      email={emailEnabled(c.env)}
       message={c.req.query("message")?.slice(0, 250)}
     />,
   );
 });
-app.post("/endpoints", async (c) => {
-  const form = await c.req.parseBody(),
-    name = String(form.name || "").trim(),
-    url = String(form.url || "").trim();
-  if (!name || name.length > 80)
-    return c.html(<ErrorPage message="Enter an application name of 1–80 characters." />, 400);
-  try {
-    endpointURL(url);
-  } catch (e) {
-    return c.html(<ErrorPage message={(e as Error).message} />, 400);
+async function preferences(c: import("hono").Context<App>) {
+  const form = await c.req.parseBody();
+  const name = String(form.name || "").trim(),
+    url = String(form.url || "").trim(),
+    mode = String(form.delivery_mode || "webhook"),
+    emailId = String(form.email_id || "");
+  if (!name || name.length > 80) throw new Error("Enter an app name of 1–80 characters.");
+  if (!["webhook", "email", "both"].includes(mode))
+    throw new Error("Choose webhook, email, or both.");
+  if (url || mode !== "email") endpointURL(url);
+  if (mode !== "webhook") {
+    if (!emailEnabled(c.env))
+      throw new Error("Email delivery is not configured on this deployment.");
+    const email = await c.env.DB.prepare(
+      "SELECT id FROM email_addresses WHERE id=? AND account_id=? AND verified_at IS NOT NULL",
+    )
+      .bind(emailId, c.get("accountId"))
+      .first();
+    if (!email) throw new Error("Select a verified email address from your settings.");
   }
+  return { name, url, mode, emailId: mode === "webhook" ? null : emailId };
+}
+app.post("/endpoints", async (c) => {
+  let config;
+  try {
+    config = await preferences(c);
+  } catch (error) {
+    return c.html(<ErrorPage message={(error as Error).message} />, 400);
+  }
+  const { name, url, mode, emailId } = config;
   const secret = token("whsec_"),
     id = crypto.randomUUID();
   const result = await c.env.DB.prepare(
-    "INSERT INTO endpoints(id,account_id,name,url,secret,challenge) SELECT ?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM endpoints WHERE account_id=?)<10",
+    "INSERT INTO endpoints(id,account_id,name,url,secret,challenge,delivery_mode,email_id,status) SELECT ?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM endpoints WHERE account_id=?)<10",
   )
     .bind(
       id,
@@ -248,11 +256,16 @@ app.post("/endpoints", async (c) => {
       url,
       await seal(secret, c.env.ENCRYPTION_KEY),
       token(),
+      mode,
+      emailId,
+      mode === "webhook" ? "pending" : "active",
       c.get("accountId"),
     )
     .run();
   if (!result.meta.changes)
     return c.html(<ErrorPage message="This workspace already has ten connections." />, 400);
+  if (mode === "email" && !url)
+    return c.redirect("/dashboard?message=App%20subscribed%20to%20email%20notifications.", 303);
   const endpoint = await c.env.DB.prepare("SELECT * FROM endpoints WHERE id=?")
     .bind(id)
     .first<Endpoint>();
@@ -272,14 +285,66 @@ app.post("/endpoints/:id/:action", async (c) => {
   if (!e) return c.notFound();
   let message = "";
   const action = c.req.param("action");
-  if (action === "verify") {
-    if (e.status !== "pending") return c.redirect("/dashboard", 303);
+  if (action === "settings") {
+    let config;
+    try {
+      config = await preferences(c);
+    } catch (error) {
+      return c.html(<ErrorPage message={(error as Error).message} />, 400);
+    }
+    const changed = config.url !== e.url,
+      secret = token("whsec_");
+    const status =
+      e.status === "paused"
+        ? "paused"
+        : config.mode === "webhook" && (changed || !e.webhook_verified)
+          ? "pending"
+          : "active";
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        "UPDATE endpoints SET name=?,url=?,delivery_mode=?,email_id=?,status=?,webhook_verified=?,secret=?,challenge=? WHERE id=? AND account_id=?",
+      ).bind(
+        config.name,
+        config.url,
+        config.mode,
+        config.emailId,
+        status,
+        changed ? 0 : e.webhook_verified,
+        changed ? await seal(secret, c.env.ENCRYPTION_KEY) : e.secret,
+        changed ? token() : e.challenge,
+        e.id,
+        c.get("accountId"),
+      ),
+      c.env.DB.prepare(
+        "UPDATE deliveries SET status='cancelled',lease=NULL,error='Delivery settings changed' WHERE endpoint_id=? AND status IN ('pending','retry','sending') AND ((channel='webhook' AND (?='email' OR ?=1)) OR (channel='email' AND (?='webhook' OR email_id IS NOT ?)))",
+      ).bind(e.id, config.mode, changed ? 1 : 0, config.mode, config.emailId),
+    ]);
+    if (changed && config.url)
+      return c.html(
+        <SecretPage
+          title="Save your new signing secret."
+          label="Signing secret"
+          secret={secret}
+          endpoint={{ ...e, url: config.url }}
+        />,
+      );
+    return c.redirect("/dashboard?message=Delivery%20settings%20saved.", 303);
+  } else if (action === "verify") {
+    if (e.webhook_verified || e.delivery_mode === "email" || !e.url)
+      return c.redirect("/dashboard", 303);
     try {
       const challenge = token();
       e.challenge = challenge;
-      await c.env.DB.prepare("UPDATE endpoints SET challenge=? WHERE id=?")
-        .bind(challenge, e.id)
+      const challengeUpdate = await c.env.DB.prepare(
+        "UPDATE endpoints SET challenge=? WHERE id=? AND url=? AND secret=? AND webhook_verified=0",
+      )
+        .bind(challenge, e.id, e.url, e.secret)
         .run();
+      if (!challengeUpdate.meta.changes)
+        return c.redirect(
+          "/dashboard?message=The%20webhook%20changed.%20Verify%20its%20current%20destination.",
+          303,
+        );
       const id = `verify_${crypto.randomUUID()}`;
       const r = await send(
         c.env,
@@ -291,9 +356,9 @@ app.post("/endpoints/:id/:action", async (c) => {
       if (r.code < 200 || r.code >= 300 || !(await equal(r.body, challenge)))
         throw new Error("Challenge failed");
       const result = await c.env.DB.prepare(
-        "UPDATE endpoints SET status='active' WHERE id=? AND status='pending' AND challenge=?",
+        "UPDATE endpoints SET webhook_verified=1,status=CASE WHEN status='pending' THEN 'active' ELSE status END WHERE id=? AND webhook_verified=0 AND challenge=? AND url=? AND secret=?",
       )
-        .bind(e.id, challenge)
+        .bind(e.id, challenge, e.url, e.secret)
         .run();
       message = result.meta.changes
         ? "Endpoint verified. You’re ready for the next advisory."
@@ -303,9 +368,18 @@ app.post("/endpoints/:id/:action", async (c) => {
         "Verification failed. Return the signed challenge verbatim as plain text with a 2xx status. Check that your endpoint is public HTTPS.";
     }
   } else if (action === "test") {
-    if (e.status !== "active")
+    const eligibleEmail =
+      e.delivery_mode !== "webhook" && emailEnabled(c.env) && e.email_id
+        ? await c.env.DB.prepare(
+            "SELECT id FROM email_addresses WHERE id=? AND account_id=? AND verified_at IS NOT NULL",
+          )
+            .bind(e.email_id, e.account_id)
+            .first()
+        : null;
+    const eligibleWebhook = e.delivery_mode !== "email" && e.webhook_verified;
+    if (e.status !== "active" || (!eligibleEmail && !eligibleWebhook))
       return c.html(
-        <ErrorPage message="Verify and activate this endpoint before sending a test." />,
+        <ErrorPage message="Activate this app and verify at least one configured destination before sending a test." />,
         400,
       );
     await enqueueTest(c.env, e);
@@ -313,7 +387,7 @@ app.post("/endpoints/:id/:action", async (c) => {
     message = "Test queued. Refresh shortly to see delivery status.";
   } else if (action === "toggle") {
     await c.env.DB.prepare(
-      "UPDATE endpoints SET status=CASE status WHEN 'active' THEN 'paused' WHEN 'paused' THEN 'active' ELSE status END WHERE id=?",
+      "UPDATE endpoints SET status=CASE WHEN status='paused' THEN CASE WHEN delivery_mode='webhook' AND webhook_verified=0 THEN 'pending' ELSE 'active' END ELSE 'paused' END WHERE id=?",
     )
       .bind(e.id)
       .run();
@@ -335,6 +409,8 @@ app.post("/api/admin/sync", async (c) => {
   await drain(c.env);
   return c.json(result);
 });
+app.route("/", oauth);
+app.route("/", workspace);
 app.get("*", async (c) => {
   const path = new URL(c.req.url).pathname;
   if (

@@ -4,7 +4,7 @@
 
 1. Add global registration/verification quotas in addition to per-IP limits; exercise abuse budgets without blocking legitimate receiver retries.
 2. Define a retention policy for deleted workspaces and historical deliveries; implement scheduled bounded cleanup and validate that live outbox rows are never pruned.
-3. Add management-token rotation and workspace deletion. Rotate inside an authenticated session, invalidate the old hash, and verify old-cookie rejection.
+3. Management-token replacement now exists in settings. Add workspace deletion and a UI to revoke all browser sessions.
 4. Add signing-secret rotation with two explicit key IDs and a short overlapping verification period. Document rollback; test deliveries across rotation.
 5. Configure an external health check for /api/health and delivery-backlog alerts. Simulate GitHub downtime, receiver downtime and scheduler interruption.
 6. Decide whether stronger egress isolation is required. If so, implement an egress proxy that validates and pins DNS resolution across connection creation, before enabling private or enterprise endpoint configurations.
@@ -18,7 +18,7 @@
 
 ## Expand product
 
-1. Add GitHub App authentication, organizations and member roles. Preserve existing capability workspaces through an explicit claim flow.
+1. GitHub App authentication and explicit workspace linking now exist. Add organizations/member roles and repository installation/issue delivery following integrations/github-app.md.
 2. Add RubySec ingestion under a separate source identity, normalize aliases and prove CVE/GHSA deduplication before merging feeds.
 3. Let users upload or locally inspect Gemfile.lock; minimize retained data and show why a package matches. Use RubyGems version semantics, including prereleases, with independently verified fixtures.
 4. Add curated advisory-specific skills with source provenance, reviewed commit pins and maintenance ownership.

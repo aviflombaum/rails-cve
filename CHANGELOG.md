@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — accounts and integrations
+
+- Account settings, expiring browser sessions and recovery-token replacement.
+- GitHub App registration/login and explicit existing-workspace linking, with PKCE and browser-bound single-use state.
+- Per-codebase webhook/email/both subscriptions with verified addresses and independent outbox channels.
+- Configurable SMTP TLS or Cloudflare email transport; no embedded credentials.
+- Filterable, paginated delivery history with immutable payloads and per-attempt outcomes.
+- OpenClaw/Hermes setup prompts, minimal GitHub App permissions guide, and agent-led/Cloudflare-button self-hosting docs.
+- Migration 0002 preserves existing token workspaces, webhook verification and historical deliveries.
+
+
 ## Unreleased — initial open-source version
 
 - Canonical Rails advisory ingestion with a quiet initial baseline and revision deduplication.

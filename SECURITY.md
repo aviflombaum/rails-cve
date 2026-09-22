@@ -20,6 +20,6 @@ This service processes public upstream data and makes outbound requests to subsc
 - Receivers must verify the signature and timestamp before parsing/processing an event, and deduplicate the signed event ID.
 - Keep the relay isolated from private networking. DNS preflight and fetch resolution are separate; the current implementation does not provide a formal DNS-rebinding-proof egress boundary.
 - Store the encryption key outside Git and preserve a secure backup. Replacing it makes existing encrypted endpoint secrets unreadable.
-- The application currently lacks account recovery, account-token rotation, global signup quotas, and automated retention. Review these constraints before a broad public deployment.
+- The application supports recovery tokens and GitHub linking but has no email-based account recovery, global signup quotas, or automated retention. Review these constraints before a broad public deployment.
 
 See [operations](docs/operations.md) and [webhooks](docs/webhooks.md) for the complete operational contract. This relay is an additional notification channel, not a replacement for your security program or incident response process.

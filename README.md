@@ -10,7 +10,7 @@
 
 **From a Rails security advisory to your next actionable step.**
 
-Signed webhooks. Exact affected versions. Investigation briefs for your coding agent.
+Signed webhooks. Verified email notifications. Investigation briefs for your coding agent.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-cf3028?style=flat-square)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=flat-square&logo=cloudflareworkers&logoColor=white)](https://developers.cloudflare.com/workers/)
@@ -19,7 +19,7 @@ Signed webhooks. Exact affected versions. Investigation briefs for your coding a
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
 [![Contributions welcome](https://img.shields.io/badge/Contributions-welcome-cf3028?style=flat-square)](CONTRIBUTING.md)
 
-[**Try it live ↗**](https://rails-cve.avi.nyc) · [**See a real payload**](https://rails-cve.avi.nyc/docs#example-payload) · [**Run locally**](#run-locally) · [**Self-host**](docs/self-hosting.md) · [**Contribute**](CONTRIBUTING.md)
+[**Try it live ↗**](https://rails-cve.avi.nyc) · [**See a real payload**](https://rails-cve.avi.nyc/docs#example-payload) · [**Run locally**](#run-locally) · [**Self-host**](docs/self-hosting.md) · [**Deploy with your agent**](docs/deploy-with-agent.md) · [**Contribute**](CONTRIBUTING.md)
 
 </div>
 
@@ -41,7 +41,9 @@ Rails CVE watches the Rails maintainers' published advisories, sends a signed no
 | **Signed deliveries** | HMAC-SHA256 signatures, timestamps, an ownership handshake, and encrypted signing secrets. |
 | **Durable retries** | D1-backed outbox, stable event IDs, recovery after interrupted attempts, and delivery history. |
 | **Agent-ready context** | Copyable investigation briefs and downloadable `SKILL.md` files. Human review before changes. |
-| **A small workspace** | Token-based access, up to ten endpoints, verification, test deliveries, pause, resume, and deletion. |
+| **Your app subscriptions** | Up to ten codebases, each with webhook, email, or both. Verified destinations, tests, pause/resume, and a filterable delivery log. |
+| **Account settings** | GitHub App login or management-token access, explicit account linking, recovery-token rotation, and verified notification addresses. |
+| **Agent setup guides** | Copy/paste prompts for OpenClaw and NousResearch Hermes; signature-verifying receiver recipes and self-hosting instructions. |
 | **Open interfaces** | Public JSON feed, per-advisory API, health endpoint, and a Rails receiver example. |
 | **Self-hostable** | One Worker, one D1 database, static assets, and a cron trigger. |
 
@@ -53,6 +55,16 @@ Rails CVE watches the Rails maintainers' published advisories, sends a signed no
 ![Rails CVE homepage with recent advisories and an explanation of the delivery flow](docs/assets/homepage.jpg)
 
 </details>
+
+## Connect your agent
+
+[OpenClaw setup →](docs/integrations/openclaw.md) · [Hermes setup →](docs/integrations/hermes.md)
+
+Each guide includes a prompt to give your existing agent. It builds a receiver that verifies signatures, persists events, handles the ownership handshake, and dispatches a read-only investigation to your local gateway. These are integration recipes, not bundled adapters. Keep code changes and deployment behind human approval.
+
+[GitHub App setup →](docs/integrations/github-app.md) · [SMTP / email setup →](docs/integrations/email.md)
+
+GitHub login and email delivery appear only when their deployment settings are configured. No credentials are included in this repository. The branch adds these features; an older hosted deployment may still show the original token/webhook UI.
 
 ## Run locally
 
@@ -122,6 +134,7 @@ The prompt asks for evidence, an applicability verdict, and a proposed fix. Rece
 flowchart LR
   A[Official Rails advisories] --> B[Worker: five-minute sync]
   B --> C[(D1: advisories and durable outbox)]
+  C --> M[Verified email with independent retries]
   C --> D[Signed webhook with retries]
   D --> E[Your verified receiver]
   E --> F[Your agent investigates]
@@ -145,6 +158,10 @@ CI runs these checks on pull requests without production credentials. The CI bad
 
 | Documentation | What you'll find |
 | :--- | :--- |
+| [Agent-led deployment / Cloudflare button](docs/deploy-with-agent.md) | Copy/paste deployment brief and the prerequisites for a published deploy button. |
+| [GitHub App](docs/integrations/github-app.md) | Login registration, callback URLs, minimal permissions, and the future issue bot. |
+| [Email](docs/integrations/email.md) | Configurable SMTP or Cloudflare transport and verified per-app destinations. |
+| [Account and delivery workflow](docs/accounts.md) | Settings, GitHub linking, email confirmation, and delivery history. |
 | [Self-hosting](docs/self-hosting.md) | Your own Cloudflare account, database, secrets, domain, and deployment. |
 | [Webhook integration](docs/webhooks.md) | Signature verification, handshake, event schema, idempotency, and Rails setup. |
 | [Architecture](docs/architecture.md) | Source ingestion, delivery state, and where to change things. |
@@ -155,9 +172,9 @@ CI runs these checks on pull requests without production credentials. The CI bad
 
 ## Scope and next steps
 
-V1 covers the **published `rails/rails` advisory feed**, not every Ruby gem or every historical Rails CVE. Delivery is at least once, without ordering guarantees or a delivery-time SLA. Management-token recovery, automatic retention, and in-place key rotation aren't implemented yet. The [operations guide](docs/operations.md) documents these limits and the DNS-validation caveat.
+V1 covers the **published `rails/rails` advisory feed**, not every Ruby gem or every historical Rails CVE. Delivery is at least once, without ordering guarantees or a delivery-time SLA. Automatic retention, global signup quotas, and seamless signing-key rotation aren't implemented yet. Save a recovery token or link GitHub before losing access. The [operations guide](docs/operations.md) documents these limits and the DNS-validation caveat.
 
-A future **GitHub App** could open or update one issue per advisory in opted-in repositories, including the context and agent prompt. That would let teams use their existing issue-to-agent workflow without building a receiver. **It is an idea, not a shipped feature.**
+A future **GitHub App** could open or update one issue per advisory in opted-in repositories, including the context and agent prompt. That would let teams use their existing issue-to-agent workflow without building a receiver. **GitHub login ships in this branch; repository installation and issue delivery remain planned.**
 
 Contributions to reliability, accessibility, documentation, and receiver examples are welcome. For large integrations, start with a proposal so we can agree on scope.
 
