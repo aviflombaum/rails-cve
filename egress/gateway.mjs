@@ -146,12 +146,17 @@ export function gateway({ token, forward = deliver, concurrency = 10 }) {
         });
         res.end(JSON.stringify(body));
       };
-      if (req.method !== "POST" || req.url !== "/deliver") {
+      const health = req.method === "GET" && req.url === "/health";
+      if (!health && (req.method !== "POST" || req.url !== "/deliver")) {
         reply(404, { error: "Not found" });
         return;
       }
       if (!timingSafeEqual(expected, digest(req.headers.authorization || ""))) {
         reply(401, { error: "Unauthorized" });
+        return;
+      }
+      if (health) {
+        reply(200, { status: "ok" });
         return;
       }
       if (active >= concurrency) {

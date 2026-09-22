@@ -1,0 +1,52 @@
+name: Cloudflare egress gateway
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "43 8 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: egress-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile --cwd egress/cloudflare
+      - run: bun audit --cwd egress/cloudflare
+      - run: npm audit --omit=dev --prefix egress/cloudflare/runtime
+      - run: bun run --cwd egress/cloudflare check
+      - run: bun run test:egress
+      - run: bunx wrangler deploy --dry-run --config egress/cloudflare/wrangler.jsonc
+      - run: docker build --platform linux/amd64 -f egress/cloudflare/Dockerfile -t rails-cve-egress:check .
+      - name: Check container authentication and health with a fixture credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          export EGRESS_PROXY_TOKEN=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          docker run -d --name egress-check --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            -e EGRESS_PROXY_TOKEN -p 127.0.0.1:18080:8080 rails-cve-egress:check
+          trap 'docker rm -f egress-check >/dev/null' EXIT
+          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 \
+            -H "Authorization: Bearer $EGRESS_PROXY_TOKEN" http://127.0.0.1:18080/health > /tmp/egress-health.json
+          node -e 'const assert = require("node:assert/strict"); assert.deepEqual(require("/tmp/egress-health.json"), { status: "ok" })'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/health)" = 401

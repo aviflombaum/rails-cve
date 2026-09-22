@@ -1,0 +1,9 @@
+{
+  "name": "rails-cve-egress-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "ipaddr.js": "2.5.0"
+  }
+}

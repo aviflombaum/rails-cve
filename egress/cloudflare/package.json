@@ -1,0 +1,17 @@
+{
+  "name": "rails-cve-egress-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "wrangler types && tsc --noEmit && node --test ../../test/egress-cloudflare.test.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "0.3.7"
+  },
+  "devDependencies": {
+    "wrangler": "4.136.3",
+    "typescript": "7.0.2",
+    "@types/node": "26.6.2"
+  }
+}

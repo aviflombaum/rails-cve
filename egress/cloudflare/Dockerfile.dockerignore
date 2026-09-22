@@ -1,0 +1,9 @@
+**
+!egress/
+!egress/gateway.mjs
+!egress/limits.mjs
+!egress/cloudflare/
+!egress/cloudflare/container.mjs
+!egress/cloudflare/runtime/
+!egress/cloudflare/runtime/package.json
+!egress/cloudflare/runtime/package-lock.json

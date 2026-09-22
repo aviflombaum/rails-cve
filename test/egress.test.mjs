@@ -133,6 +133,12 @@ test("gateway requires its own credential before accepting work and returns reda
   await once(server, "listening");
   const url = `http://127.0.0.1:${server.address().port}/deliver`;
   try {
+    const health = new URL("/health", url);
+    assert.equal((await fetch(health)).status, 401);
+    const healthy = await fetch(health, { headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(healthy.status, 200);
+    assert.deepEqual(await healthy.json(), { status: "ok" });
+    assert.equal(forwarded, 0);
     const denied = await fetch(url, { method: "POST", body: JSON.stringify(data) });
     assert.equal(denied.status, 401);
     assert.equal(forwarded, 0);
