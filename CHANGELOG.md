@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Override the test emulator’s transitive sharp dependency to patched 0.35.4 while its upstream package remains pinned to the affected release.
+
 - Encrypt complete webhook destinations, mask URL credentials in forms, upgrade legacy rows in bounded batches, redact query telemetry and disable destination traces.
 
 - Secure-account recovery revokes prior sessions and OAuth flows, requires credential proof, and can remove an unexpected GitHub link.

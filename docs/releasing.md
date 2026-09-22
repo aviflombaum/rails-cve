@@ -24,3 +24,7 @@ No deployment workflow or production credentials are required to accept contribu
 ## Releases
 
 Record changes in CHANGELOG.md, run the checks, and review webhook compatibility and database migration requirements. Tag a release only after validation. Include upgrade instructions for schema, config, or secret-handling changes; rolling back Worker code does not roll back D1.
+
+## Test-toolchain security override
+
+The latest `@cloudflare/vitest-pool-workers` 0.22.0 pins Miniflare with sharp 0.35.2. A narrow `sharp: 0.35.4` override fixes GHSA-rgj7-g3m4-5g8c for every dependency path. Re-evaluate this override when upgrading the pool; remove it once the upstream lock graph is entirely patched. Run `bun audit`, the Workers tests, and a deployment dry run before accepting dependency changes.

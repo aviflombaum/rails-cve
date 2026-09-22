@@ -42,5 +42,8 @@
   "homepage": "https://rails-cve.avi.nyc",
   "bugs": {
     "url": "https://github.com/aviflombaum/rails-cve/issues"
+  },
+  "overrides": {
+    "sharp": "0.35.4"
   }
 }
