@@ -35,7 +35,7 @@ class RailsCveWebhooksController < ActionController::Base
     return head :unauthorized unless ActiveSupport::SecurityUtils.secure_compare(expected, signature.delete_prefix('v1='))
 
     payload = JSON.parse(body)
-    return head :bad_request unless payload.is_a?(Hash) && payload['schema_version'] == 1
+    return head :bad_request unless payload.is_a?(Hash) && [1, 2].include?(payload['schema_version'])
 
     if payload['type'] == 'endpoint.verification'
       challenge = payload['challenge']

@@ -1,3 +1,4 @@
+import { MAX_EVENT_BYTES, eventBytes } from "./limits";
 import { readDestination } from "./destinations";
 import { fanout } from "./fanout";
 import { sendAdvisoryEmail, emailEnabled } from "./email";
@@ -23,6 +24,7 @@ export async function send(
   id: string,
   challenge = false,
 ) {
+  if (eventBytes(body) > MAX_EVENT_BYTES) throw new Error("Payload exceeds the 1 MiB event limit");
   const destination = await readDestination(endpoint.url, env.ENCRYPTION_KEY);
   await safeDestination(destination);
   const timestamp = String(Math.floor(Date.now() / 1000));
@@ -138,11 +140,13 @@ export async function drain(env: Env) {
         const event = await env.DB.prepare("SELECT payload FROM events WHERE id=?")
           .bind(row.event_id)
           .first<{ payload: string }>();
+        const oversized = !!event && eventBytes(event.payload) > MAX_EVENT_BYTES;
         let code: number | null = null,
           error: string | null = null,
           providerId: string | null = null;
         try {
           if (!event) throw new Error("Missing event");
+          if (oversized) throw new Error("Oversized legacy event");
           if (row.channel === "email") {
             providerId = (
               await sendAdvisoryEmail(
@@ -158,8 +162,9 @@ export async function drain(env: Env) {
             if (code < 200 || code >= 300) error = `HTTP ${code}`;
           }
         } catch {
-          error =
-            row.channel === "email"
+          error = oversized
+            ? "Payload exceeds the 1 MiB event limit; inspect the canonical advisory"
+            : row.channel === "email"
               ? "Email provider did not confirm acceptance"
               : "Connection, DNS, or destination validation failed";
         }
@@ -167,7 +172,7 @@ export async function drain(env: Env) {
           ? row.channel === "email"
             ? "accepted"
             : "delivered"
-          : row.attempts >= 8
+          : oversized || row.attempts >= 8
             ? "failed"
             : "retry";
         await env.DB.batch([

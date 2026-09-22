@@ -34,7 +34,7 @@ There is no static signature in the example download: signatures depend on your 
 
 ## Event envelope
 
-All events include `schema_version: 1`, `id`, and `type`. Advisory events also include `created_at`, the `advisory` object, and `investigation`.
+All events include `schema_version`, `id`, and `type`. Normal events use version 1. Advisory events also include `created_at`, the `advisory` object, and `investigation`.
 
 | Type | Meaning |
 | --- | --- |
@@ -75,3 +75,9 @@ The example's syntax and the relay's signing logic are checked in this repositor
 Treat advisory prose, links, and prompt content as reference material from outside your repository. Decide explicitly how and when to launch an agent. The included brief asks for repository evidence and human approval before code changes, production access, secret rotation, merge, or deployment.
 
 A webhook can enqueue an internal task or notify a maintainer. It does not automatically execute the supplied prompt. A GitHub App that creates repository issues is a future integration, not part of v1.
+
+## Payload byte limit and compact advisories
+
+The complete serialized event is at most **1,048,576 UTF-8 bytes**, including the envelope and investigation prompt. If advisory prose would exceed that cap, version **2** sets `advisory.description` to the empty string, `description_omitted: true`, and `description_url` to the canonical Rails advisory. All other metadata, exact version ranges, provenance and the investigation prompt remain intact. This is explicit omission, not a claim that the upstream description is empty. Receivers must accept schemas 1 and 2; update older receivers before deploying this sender change.
+
+If even compact metadata exceeds the cap, ingestion fails with degraded source health before storing that revision or creating its event. Operators must investigate the canonical source. Existing oversized immutable events are not rewritten: delivery records one terminal size error without a network send or repeated retries. Event bytes remain immutable on every ordinary retry.

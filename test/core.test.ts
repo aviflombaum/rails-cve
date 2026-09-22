@@ -1,3 +1,4 @@
+import { MAX_EVENT_BYTES, eventBytes } from "../src/limits";
 import { readDestination, encryptLegacyDestinations } from "../src/destinations";
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
@@ -12,7 +13,7 @@ import {
   token,
   safeDestination,
 } from "../src/security";
-import { ingest, normalize, skill, sync } from "../src/advisories";
+import { advisoryPayload, ingest, normalize, skill, sync } from "../src/advisories";
 import { drain, enqueueTest, type Endpoint } from "../src/delivery";
 import upstream from "./upstream.json";
 import { requestVerification } from "../src/email";
@@ -1180,5 +1181,72 @@ describe("private webhook destinations", () => {
     expect(await bindings.DB.prepare("SELECT status FROM deliveries").first("status")).toBe(
       "delivered",
     );
+  });
+});
+
+describe("event byte contract", () => {
+  const event = {
+    id: "evt_size",
+    type: "advisory.published",
+    created_at: "2026-09-22T00:00:00.000Z",
+  };
+  it("uses the exact serialized UTF-8 boundary and preserves compact metadata", () => {
+    const empty = advisoryPayload({ ...a, description: "" }, event, bindings.APP_URL);
+    const available = MAX_EVENT_BYTES - eventBytes(JSON.stringify(empty));
+    const fits = advisoryPayload(
+      { ...a, description: "x".repeat(available) },
+      event,
+      bindings.APP_URL,
+    );
+    expect(fits.schema_version).toBe(1);
+    expect(eventBytes(JSON.stringify(fits))).toBe(MAX_EVENT_BYTES);
+    const compact = advisoryPayload(
+      { ...a, description: "é".repeat(available) },
+      event,
+      bindings.APP_URL,
+    );
+    expect(compact.schema_version).toBe(2);
+    expect(compact.advisory).toMatchObject({
+      id: a.id,
+      packages: a.packages,
+      url: a.url,
+      description: "",
+      description_omitted: true,
+      description_url: a.url,
+    });
+    expect(compact.investigation).toEqual(fits.investigation);
+    expect(eventBytes(JSON.stringify(compact))).toBeLessThanOrEqual(MAX_EVENT_BYTES);
+  });
+  it("rejects oversized range metadata before storing an event", async () => {
+    await ingest(bindings, [a]);
+    await expect(
+      ingest(bindings, [
+        {
+          ...a,
+          packages: [{ name: "rails", affected: "x".repeat(MAX_EVENT_BYTES), patched: null }],
+        },
+      ]),
+    ).rejects.toThrow("metadata exceeds");
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM events").first("n")).toBe(0);
+    expect(await bindings.DB.prepare("SELECT data FROM advisories").first("data")).toBe(
+      JSON.stringify(a),
+    );
+  });
+  it("fails legacy oversized events once without a network request", async () => {
+    const ep = await endpoint();
+    await enqueueTest(bindings, ep);
+    await bindings.DB.prepare("UPDATE events SET payload=?")
+      .bind("x".repeat(MAX_EVENT_BYTES + 1))
+      .run();
+    await drain(bindings);
+    await drain(bindings);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(
+      await bindings.DB.prepare("SELECT status,attempts,error FROM deliveries").first(),
+    ).toEqual({
+      status: "failed",
+      attempts: 1,
+      error: "Payload exceeds the 1 MiB event limit; inspect the canonical advisory",
+    });
   });
 });

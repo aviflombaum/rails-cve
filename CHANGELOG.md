@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bound complete events to 1 MiB, add explicit compact advisory schema 2, and fail oversized legacy deliveries without retries. Receivers must accept schemas 1 and 2.
+
 - Reject canonical advisory API redirects without following targets or forwarding credentials.
 
 - Enforce the eight-attempt ceiling when recovering interrupted delivery leases and record uncertain receipt.

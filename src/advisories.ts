@@ -1,3 +1,4 @@
+import { MAX_EVENT_BYTES, eventBytes } from "./limits";
 import { fanout } from "./fanout";
 import { boundedText, hash } from "./security";
 export interface Advisory {
@@ -68,7 +69,7 @@ export function advisoryPayload(
   event: { id: string; type: string; created_at: string },
   appUrl: string,
 ) {
-  return {
+  const full = {
     schema_version: 1,
     ...event,
     advisory,
@@ -77,6 +78,20 @@ export function advisoryPayload(
       skill_url: `${appUrl}/advisories/${advisory.id}/SKILL.md`,
     },
   };
+  if (eventBytes(JSON.stringify(full)) <= MAX_EVENT_BYTES) return full;
+  const compact = {
+    ...full,
+    schema_version: 2,
+    advisory: {
+      ...advisory,
+      description: "",
+      description_omitted: true,
+      description_url: advisory.url,
+    },
+  };
+  if (eventBytes(JSON.stringify(compact)) > MAX_EVENT_BYTES)
+    throw new Error("Advisory metadata exceeds the 1 MiB event limit");
+  return compact;
 }
 
 export async function ingest(env: Env, list: Advisory[]) {
