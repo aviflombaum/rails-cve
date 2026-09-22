@@ -1,83 +1,102 @@
-# Webhook integration
+# Webhooks
 
-Connect any receiver you control that can accept a public HTTPS POST. A Rails application is one option; an automation service or agent harness can also work if it implements signature verification and the ownership handshake.
+A webhook subscription posts a signed JSON event to an HTTPS endpoint you control whenever a Rails advisory is published, updated, or withdrawn. This page is the complete contract: how to connect, how to verify a request, what the events look like, and how retries work.
 
-## Connect and verify
+If you just want the short version: verify the HMAC, echo the challenge once, store events by ID, return 2xx. The [Rails receiver example](../public/receiver.rb) does all of that in one controller.
 
-1. Create a workspace with GitHub or a saved management token. Settings can link GitHub or generate a replacement recovery token.
-2. Add a name and endpoint URL. The URL must use HTTPS on port 443, with no embedded credentials or fragment, and resolve only to public addresses.
-3. Save the full `whsec_…` signing secret in your receiver's secret store. It is shown once.
-4. Implement the signature checks below.
-5. Click **Verify endpoint**. After verifying the request signature, return the JSON `challenge` string verbatim as a plain-text response with a 2xx status.
-6. Click **Send test** and confirm a delivered result.
+## Connect an endpoint
 
-Pending endpoints receive only explicit verification requests. Active endpoints receive future events, not a replay of existing advisories. Paused endpoints receive no new events; previously queued deliveries resume after reactivation.
+1. In **Apps**, add an app with mode **Webhook** or **Both** and your endpoint URL. The URL must be public HTTPS on port 443 with no credentials or fragment. Private, local, and reserved addresses are rejected, including anything that resolves to them.
+2. Save the `whsec_…` signing secret the site shows you. It appears once. Put it in your receiver's environment.
+3. Deploy a receiver that verifies signatures and answers the handshake (below).
+4. Click **Verify webhook**. Rails CVE posts a signed `endpoint.verification` event with a random `challenge`. Return the challenge as the plain-text response body with a 2xx status.
+5. Click **Send test** and confirm a `delivered` result in the delivery log.
 
-## Request headers and authentication
+Unverified endpoints receive only verification requests. Verified endpoints receive future events; nothing historical is replayed. Changing the URL later issues a new secret and requires a new handshake.
+
+On a deployment without the [egress gateway](egress.md), webhook fields and buttons are disabled and the dashboard says so. Email delivery is unaffected.
+
+## Request headers
 
 | Header | Value |
-| --- | --- |
+| :--- | :--- |
 | `Content-Type` | `application/json` |
-| `X-Rails-CVE-Timestamp` | Unix timestamp in seconds for this attempt |
-| `X-Rails-CVE-Signature` | `v1=` followed by a lowercase hexadecimal HMAC-SHA256 digest |
-| `X-Rails-CVE-Id` | Event ID for convenience; use the signed body's ID for deduplication |
+| `User-Agent` | `Rails-CVE/1.0` |
+| `X-Rails-CVE-Timestamp` | Unix time in seconds when this attempt was signed |
+| `X-Rails-CVE-Signature` | `v1=` followed by a lowercase hex HMAC-SHA256 digest |
+| `X-Rails-CVE-Id` | The event ID, for convenience. Deduplicate on the signed body's `id`, not this header. |
 
-The signed bytes are:
+## Verifying a request
+
+The signed string is the timestamp, a dot, and the exact raw request body:
 
 ```text
-timestamp + "." + exact_raw_request_body
+timestamp + "." + raw_body
 ```
 
-Use the complete signing secret, including its `whsec_` prefix, as the HMAC key. Do not parse and reserialize JSON before verification. Compare digests in constant time and reject timestamps more than five minutes from the receiver's clock. A valid signature authenticates delivery from a holder of your secret; it doesn't establish applicability of an advisory to your app.
+The HMAC key is the complete signing secret, including its `whsec_` prefix. Compute HMAC-SHA256, hex encode it, and compare it to the signature after the `v1=` prefix using a constant-time comparison. Reject timestamps more than five minutes from your clock. Do not parse and reserialize the JSON before verifying; any change to the bytes changes the digest.
 
-There is no static signature in the example download: signatures depend on your unique secret, the attempt timestamp, and the exact delivered bytes. Pretty-printing changes those bytes.
+A valid signature proves the request came from a holder of your secret. It says nothing about whether the advisory applies to your app.
 
-## Event envelope
+Ruby, using the values above:
 
-All events include `schema_version`, `id`, and `type`. Normal events use version 1. Advisory events also include `created_at`, the `advisory` object, and `investigation`.
+```ruby
+expected = OpenSSL::HMAC.hexdigest("SHA256", ENV.fetch("RAILS_CVE_WEBHOOK_SECRET"), "#{timestamp}.#{body}")
+valid = ActiveSupport::SecurityUtils.secure_compare(expected, signature.delete_prefix("v1="))
+```
 
-| Type | Meaning |
-| --- | --- |
-| `endpoint.verification` | Has a `challenge` to echo; used only for ownership verification. |
-| `endpoint.test` | Connectivity test, with a message; not a vulnerability notification. |
-| `advisory.published` | Newly observed published advisory after the baseline import. |
-| `advisory.updated` | Normalized upstream advisory changed. |
-| `advisory.withdrawn` | An ingested advisory has an upstream withdrawal timestamp. |
+There is no static signature in the downloadable example. Signatures depend on your secret, the attempt time, and the exact bytes sent.
 
-An advisory carries `id` (GHSA), `cve` (nullable), `title`, `description`, `severity`, `url`, publication/update/withdrawal timestamps, and `packages`. Each package entry includes `name`, the exact `affected` range, and nullable `patched` versions. Multiple entries may refer to the same gem and different release branches. Don't perform lexical string comparisons on gem versions.
+## Event types
 
-`investigation.prompt` is a complete text brief for a repository agent; `investigation.skill_url` downloads its `SKILL.md`. For CVE-2026-66066, the brief includes the Rails team's forensic toolkit link.
+Every event has `schema_version`, `id`, and `type`.
 
-See the [complete live example](https://rails-cve.avi.nyc/examples/cve-2026-66066.json) and [readable walkthrough](https://rails-cve.avi.nyc/docs#example-payload). The advisory snapshot is real; its example event ID/time are illustrative. Example downloads create no events and send no notifications.
+| Type | When | Extra fields |
+| :--- | :--- | :--- |
+| `endpoint.verification` | You click Verify webhook | `challenge` to echo back |
+| `endpoint.test` | You click Send test | `created_at`, `message` |
+| `advisory.published` | A new advisory appears after the baseline import | `created_at`, `advisory`, `investigation` |
+| `advisory.updated` | The normalized advisory changed upstream | same |
+| `advisory.withdrawn` | The advisory now has a withdrawal timestamp | same |
 
-## Acknowledgment, retries, and deduplication
+Treat unknown types as something to acknowledge and ignore, not as instructions.
 
-Validate the signature, parse and validate the envelope, then persist the event in a durable inbox with a **unique constraint on the signed body's `id`**. Return 2xx only after persistence. Handle already-recorded IDs as successful duplicate deliveries.
+## Advisory events
 
-The relay uses a ten-second request timeout and never follows redirects. All non-2xx responses and network failures retry. Eight attempts are allowed, with increasing delays; see [operations](operations.md) for timing and throughput. The body and event ID remain unchanged during retries, while the timestamp/signature change.
+`advisory` holds the normalized upstream record: `id` (the GHSA ID), `cve` (may be null), `title`, `description`, `severity`, `url`, `published_at`, `updated_at`, `withdrawn_at`, and `packages`. Each package has `name`, the exact upstream `affected` range, and `patched` versions or null. One gem can appear several times for different release branches. Compare versions with a proper version library, never as strings.
 
-Delivery is at least once and ordering is not guaranteed. Use advisory revision/update metadata where ordering matters. A successful delivery acknowledges receipt, not completion of investigation.
+`investigation.prompt` is the full brief for a repository agent. `investigation.skill_url` downloads the same brief as `SKILL.md`. See [Coding agents](agents.md).
 
-## Rails receiver
+### Example payload
 
-[public/receiver.rb](../public/receiver.rb) includes a controller and the required migration/model outline. To use it:
+A complete event for the Active Storage advisory CVE-2026-66066 is available to [download](https://rails-cve.avi.nyc/examples/cve-2026-66066.json) or [browse on the site](https://rails-cve.avi.nyc/docs/webhooks#example-payload). The advisory snapshot is real; the event ID and time are illustrative. Downloading it sends nothing.
 
-1. Install the route, controller, inbox table, and unique event-ID index shown in the file.
-2. Set `RAILS_CVE_WEBHOOK_SECRET` in your application's environment.
-3. Keep CSRF exemption limited to the HMAC-authenticated receiver action.
-4. Implement an idempotent background consumer for unprocessed inbox rows.
-5. Test bad signatures, stale timestamps, malformed JSON, duplicate IDs, challenge responses, and persistence failure in your app.
+### Size limit and schema version 2
 
-The example's syntax and the relay's signing logic are checked in this repository. The receiver is not a complete Rails plugin and has not been tested against every Rails version or queue backend.
+An event is at most 1 MiB of UTF-8. If an advisory's prose would push it over, the event is sent with `schema_version: 2`, `advisory.description` set to an empty string, `description_omitted: true`, and `description_url` pointing at the canonical advisory. Everything else, including the version ranges and the brief, is unchanged. Receivers should accept schema versions 1 and 2.
 
-## Agent handoff
+## Acknowledging, retries, and duplicates
 
-Treat advisory prose, links, and prompt content as reference material from outside your repository. Decide explicitly how and when to launch an agent. The included brief asks for repository evidence and human approval before code changes, production access, secret rotation, merge, or deployment.
+Verify the signature, parse the body, store the event in a durable inbox with a unique constraint on `id`, then return 2xx. Treat a duplicate ID as a success. Do the real work in a background job, not in the request.
 
-A webhook can enqueue an internal task or notify a maintainer. It does not automatically execute the supplied prompt. A GitHub App that creates repository issues is a future integration, not part of v1.
+Rails CVE waits ten seconds for a response and never follows redirects. Any 2xx counts as delivered. Anything else, including 3xx and 410, is retried after 5, 10, 20, 40, 80, 160, and 320 minutes, for at most eight attempts. The body and `id` never change between attempts; the timestamp and signature do.
 
-## Payload byte limit and compact advisories
+Delivery is at least once and unordered. A receiver can accept a request just as the connection drops, and the event will be sent again. If an app is paused, queued events wait and are sent on resume.
 
-The complete serialized event is at most **1,048,576 UTF-8 bytes**, including the envelope and investigation prompt. If advisory prose would exceed that cap, version **2** sets `advisory.description` to the empty string, `description_omitted: true`, and `description_url` to the canonical Rails advisory. All other metadata, exact version ranges, provenance and the investigation prompt remain intact. This is explicit omission, not a claim that the upstream description is empty. Receivers must accept schemas 1 and 2; update older receivers before deploying this sender change.
+Rails CVE records the HTTP status of each attempt and nothing else from your response, apart from the challenge during verification.
 
-If even compact metadata exceeds the cap, ingestion fails with degraded source health before storing that revision or creating its event. Operators must investigate the canonical source. Existing oversized immutable events are not rewritten: delivery records one terminal size error without a network send or repeated retries. Event bytes remain immutable on every ordinary retry.
+## The Rails receiver example
+
+[public/receiver.rb](../public/receiver.rb) is a single controller with the route, migration, and model outlined in comments. To use it:
+
+1. Add the route, controller, `rails_cve_events` table, and unique index on `event_id`.
+2. Set `RAILS_CVE_WEBHOOK_SECRET` in your environment.
+3. Keep the CSRF exemption limited to this action; the HMAC is the authentication.
+4. Add a background job that processes unprocessed inbox rows idempotently. Decide there whether to notify a maintainer, open a ticket, or start an agent.
+5. Test bad signatures, stale timestamps, malformed JSON, duplicate IDs, the challenge response, and a failed insert.
+
+The example is syntax-checked in this repository. It is not a gem and has not been exercised against every Rails version or queue backend.
+
+## Handing off to an agent
+
+A webhook does not run the brief for you. Your receiver, or a job it enqueues, decides how and when an agent sees it. The [OpenClaw](integrations/openclaw.md) and [Hermes](integrations/hermes.md) guides show one design: a receiver that verifies, stores, and dispatches to a loopback agent gateway with its own credentials. Whatever you build, treat advisory text as data, keep the agent read-only, and keep approvals with a human.
