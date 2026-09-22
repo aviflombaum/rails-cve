@@ -37,7 +37,7 @@ Install with bun install --frozen-lockfile. Run the local setup and migrations, 
 
 Apply numbered remote migrations with the deployment config (back up an existing D1 first), upload required secrets, and deploy using bun run deploy. The baseline sync must be quiet. Wait for cron or call the admin sync using a token loaded privately from secret storage. Verify /api/health, advisory pages, social image and account creation. Document the first-sync 503 while initializing.
 
-Email and GitHub login are optional. Start webhook-only unless I provide configuration. For SMTP use implicit TLS port 465, my verified sender domain, EMAIL_TRANSPORT=smtp, EMAIL_FROM, SMTP_HOST and secret SMTP_USERNAME/SMTP_PASSWORD. Never use rails-cve@avi.nyc for my independent deployment. Cloudflare Email Service is an alternative if I onboard a sending domain and add an EMAIL binding. Confirm outbound email with a recipient I authorize, not arbitrary subscribers.
+Email and GitHub login are optional. Start webhook-only unless I provide configuration. For SMTP use implicit TLS port 465, my verified sender domain, EMAIL_TRANSPORT=smtp, EMAIL_FROM, SMTP_HOST and secret SMTP_USERNAME/SMTP_PASSWORD. Use only a sender authorized for my own deployment. Cloudflare Email Service is an alternative if I onboard a sending domain and add an EMAIL binding. Confirm outbound email with a recipient I authorize, not arbitrary subscribers.
 
 For GitHub login, guide me through creating my own GitHub App with callback <APP_URL>/auth/github/callback, then configure GITHUB_CLIENT_ID and secret GITHUB_CLIENT_SECRET. Do not request repo scopes or enable a repository issue bot that this release does not implement. Keep optional integration states visibly disabled until configured.
 

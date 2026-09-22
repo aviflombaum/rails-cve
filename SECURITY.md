@@ -23,3 +23,7 @@ This service processes public upstream data and makes outbound requests to subsc
 - The application supports recovery tokens and GitHub linking but has no email-based account recovery, global signup quotas, or automated retention. Review these constraints before a broad public deployment.
 
 See [operations](docs/operations.md) and [webhooks](docs/webhooks.md) for the complete operational contract. This relay is an additional notification channel, not a replacement for your security program or incident response process.
+
+## Public metadata
+
+The project attribution, repository/service URLs and monitored security contact are deliberately public. Portable setup examples use neutral sender/provider placeholders. Keep production version IDs, account/database identifiers and operational validation records in ignored protected operator storage. Removing details from the current tree does not remove public Git history or existing clones.

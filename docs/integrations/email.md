@@ -6,7 +6,7 @@ Confirmation links expire after one hour and work only in the requesting workspa
 
 An `accepted` result means the email provider accepted the message, not guaranteed inbox receipt. The outbox retries failures independently of webhook deliveries. If sending is disabled, pending email rows remain queued without consuming attempts; webhook delivery continues. New email-only/both selections are rejected until sending is configured. Check provider bounces and suppressions separately; this release does not ingest provider delivery receipts.
 
-## SMTP (the avi.nyc deployment pattern)
+## SMTP with your own verified sender
 
 Rails CVE includes a small implicit-TLS SMTP transport using [Cloudflare TCP sockets](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/). It uses AUTH LOGIN on **port 465 only**, a bounded response parser, a 30-second overall timeout, and multipart plain-text/HTML email. Port 25 and plaintext/STARTTLS configurations are not supported by this adapter. A post-DATA acceptance ends the send; cleanup failures do not resend an accepted message.
 
@@ -17,7 +17,7 @@ Set these non-secret values in your ignored deployment config:
   "APP_URL": "https://your-service.example.org",
   "EMAIL_TRANSPORT": "smtp",
   "EMAIL_FROM": "security@your-verified-domain.example",
-  "SMTP_HOST": "email-smtp.us-east-2.amazonaws.com",
+  "SMTP_HOST": "smtp.provider.example",
   "SMTP_PORT": "465"
 }
 ```
@@ -29,7 +29,7 @@ bunx wrangler secret put SMTP_USERNAME --config wrangler.deploy.jsonc
 bunx wrangler secret put SMTP_PASSWORD --config wrangler.deploy.jsonc
 ```
 
-The avi.nyc operator intends `EMAIL_FROM=rails-cve@avi.nyc`. Independent deployments must use their own authorized sender. Amazon SES verifies sender identities and is region-specific; verifying `mail.avi.nyc` does not by itself establish authorization for the parent-domain sender `rails-cve@avi.nyc`. Check the configured SES region and sender identity before sending. Also check SES sandbox/production access, recipient restrictions, DKIM/SPF/DMARC and sending limits. See [SES verified identities](https://docs.aws.amazon.com/ses/latest/dg/verify-addresses-and-domains.html).
+Use your own authorized sender and the SMTP endpoint for your provider's region. Amazon SES verifies sender identities and is region-specific; verifying a subdomain does not by itself establish authorization for a parent-domain sender. Check the configured SES region and sender identity before sending. Also check SES sandbox/production access, recipient restrictions, DKIM/SPF/DMARC and sending limits. See [SES verified identities](https://docs.aws.amazon.com/ses/latest/dg/verify-addresses-and-domains.html).
 
 SMTP credentials found in a sibling application can be transferred privately for the same operator, but are never project defaults. A new deployment should provision a narrowly scoped sending credential. No real SMTP credential is needed for tests or local UI work.
 

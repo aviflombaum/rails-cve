@@ -26,4 +26,4 @@
 
 ## Optional email acceleration
 
-Use a dedicated mail subdomain and Email Routing, confirm the Google Group subscription, verify the real List-ID, and test message-to-canonical-sync behavior. Keep polling as reconciliation. Do not migrate or overwrite existing avi.nyc mail settings.
+Use a dedicated mail subdomain and Email Routing, confirm the Google Group subscription, verify the real List-ID, and test message-to-canonical-sync behavior. Keep polling as reconciliation. Do not migrate or overwrite existing domain mail settings.

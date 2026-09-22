@@ -1,6 +1,6 @@
 # Accounts, delivery preferences, and agent integrations
 
-Status: implemented on `feat/accounts-agent-integrations`, locally validated and deployed to rails-cve.avi.nyc on 2026-09-22. Research checked 2026-09-22.
+Status: implemented and locally validated. Research checked 2026-09-22.
 
 ## Outcomes and scope
 
@@ -32,7 +32,7 @@ For the later issue bot: Issues read/write and mandatory Metadata read; selected
 
 ## Rollout and limitations
 
-Apply numbered migrations before deploying the new Worker. Back up D1 first. Existing codebase IDs are retained (`endpoints` is the historical table name). Email requires configured SMTP credentials and an authorized sender, or an onboarded Cloudflare sending domain and EMAIL binding. EMAIL_FROM is configurable. GitHub requires separately supplied client credentials. Tests use provider/network mocks, never real recipients or repos. SMTP credentials are staged in ignored production configuration with rails-cve@avi.nyc as sender; the operator reports avi.nyc is already verified in SES. GitHub and SMTP secrets were uploaded with the 2026-09-22 production deployment. The live GitHub redirect and client credential check passed. End-user OAuth consent/callback completion and actual SMTP inbox delivery still need an operator session/authorized recipient. No test email has been sent.
+Apply numbered migrations before deploying the new Worker. Back up D1 first. Existing codebase IDs are retained (`endpoints` is the historical table name). Email requires configured SMTP credentials and an authorized sender, or an onboarded Cloudflare sending domain and EMAIL binding. EMAIL_FROM is configurable. GitHub requires separately supplied client credentials. Tests use provider/network mocks, never real recipients or repos. Keep SMTP/GitHub credentials and deployment verification records in private operator storage. End-to-end checks require an operator session and an explicitly authorized recipient.
 
 Research links and exact setup steps live in `docs/integrations/`.
 
