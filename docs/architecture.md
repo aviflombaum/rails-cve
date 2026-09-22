@@ -94,3 +94,5 @@ Email providers are selectable: SMTP via implicit TLS port 465, or Cloudflare EM
 Canonical API requests use manual redirect handling. Any non-2xx response, including a redirect, fails the sync, retains existing advisory data, and records degraded source health. Redirect targets never receive the optional GitHub token.
 
 `src/egress.ts` sends authenticated envelopes only to the operator-configured gateway. `egress/gateway.mjs` resolves and validates destinations and pins the HTTPS socket lookup; `test/egress.test.mjs` runs offline Node boundary tests as part of `bun run check`. Missing gateway configuration disables webhook dispatch without consuming queued attempts.
+
+`src/abuse.ts` owns D1 atomic reservation budgets, bounded retention and transaction-scoped account deletion statements. Migration 0004 adds these records without rewriting deployed migrations. Inventory admission caps bound source fanout; the runner interleaves per-tenant batches and protects live notifications from retention. Operator-only `/api/admin/health` exposes aggregate backlog and budget state separately from public source health.

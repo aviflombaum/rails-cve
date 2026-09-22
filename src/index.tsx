@@ -1,3 +1,4 @@
+import { reserve, maintain, BudgetError } from "./abuse";
 import { webhookEnabled } from "./egress";
 import {
   readDestination,
@@ -166,11 +167,18 @@ app.get("/login", (c) =>
   ),
 );
 app.post("/accounts", async (c) => {
+  await reserve(c.env, "signup");
   const value = token("rcve_");
   const id = crypto.randomUUID();
-  await c.env.DB.prepare("INSERT INTO accounts(id,token_hash) VALUES(?,?)")
+  const created = await c.env.DB.prepare(
+    "INSERT INTO accounts(id,token_hash) SELECT ?,? WHERE (SELECT COUNT(*) FROM accounts)<1000",
+  )
     .bind(id, await hash(value))
     .run();
+  if (!created.meta.changes)
+    throw new BudgetError(
+      "This deployment has reached its account capacity. Contact the operator.",
+    );
   await session(c, id);
   return c.html(
     <SecretPage
@@ -218,6 +226,7 @@ app.get("/dashboard", async (c) => {
       emails={await addresses(c.env, c.get("accountId"))}
       email={emailEnabled(c.env)}
       webhook={webhookEnabled(c.env)}
+      deliveryPaused={c.env.DELIVERY_ENABLED === "false"}
       message={c.req.query("message")?.slice(0, 250)}
     />,
   );
@@ -261,7 +270,7 @@ app.post("/endpoints", async (c) => {
   const secret = token("whsec_"),
     id = crypto.randomUUID();
   const result = await c.env.DB.prepare(
-    "INSERT INTO endpoints(id,account_id,name,url,secret,challenge,delivery_mode,email_id,status) SELECT ?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM endpoints WHERE account_id=?)<10",
+    "INSERT INTO endpoints(id,account_id,name,url,secret,challenge,delivery_mode,email_id,status) SELECT ?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM endpoints WHERE account_id=?)<10 AND (SELECT COUNT(*) FROM endpoints)<1000",
   )
     .bind(
       id,
@@ -277,7 +286,10 @@ app.post("/endpoints", async (c) => {
     )
     .run();
   if (!result.meta.changes)
-    return c.html(<ErrorPage message="This workspace already has ten connections." />, 400);
+    return c.html(
+      <ErrorPage message="This workspace or deployment has reached its connection capacity." />,
+      400,
+    );
   if (mode === "email" && !url)
     return c.redirect("/dashboard?message=App%20subscribed%20to%20email%20notifications.", 303);
   const endpoint = await c.env.DB.prepare("SELECT * FROM endpoints WHERE id=?")
@@ -351,6 +363,7 @@ app.post("/endpoints/:id/:action", async (c) => {
       );
     if (e.webhook_verified || e.delivery_mode === "email" || !e.url)
       return c.redirect("/dashboard", 303);
+    await reserve(c.env, "verification_webhook", c.get("accountId"));
     try {
       const challenge = token();
       e.challenge = challenge;
@@ -402,6 +415,7 @@ app.post("/endpoints/:id/:action", async (c) => {
         <ErrorPage message="Activate this app and verify at least one configured destination before sending a test." />,
         400,
       );
+    await reserve(c.env, "test", c.get("accountId"));
     await enqueueTest(c.env, e);
     c.executionCtx.waitUntil(drain(c.env));
     message = "Test queued. Refresh shortly to see delivery status.";
@@ -421,10 +435,40 @@ app.post("/endpoints/:id/:action", async (c) => {
   } else return c.notFound();
   return c.redirect(`/dashboard?message=${encodeURIComponent(message)}`, 303);
 });
+app.get("/api/admin/health", async (c) => {
+  const value = c.req.header("authorization")?.replace(/^Bearer /, "") || "";
+  if (!c.env.ADMIN_TOKEN || !(await equal(value, c.env.ADMIN_TOKEN)))
+    return c.json({ error: "Unauthorized" }, 401);
+  const backlog = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS pending,MIN(created_at) AS oldest FROM deliveries WHERE status IN ('pending','retry','sending')",
+  ).first<{ pending: number; oldest: string | null }>();
+  const usage = await c.env.DB.prepare(
+    "SELECT operation,used FROM usage_buckets WHERE scope='global' AND window_start=? ORDER BY operation",
+  )
+    .bind(Math.floor(Date.now() / 3600000) * 3600000)
+    .all();
+  const counts = await c.env.DB.prepare(
+    "SELECT (SELECT COUNT(*) FROM accounts) AS accounts,(SELECT COUNT(*) FROM endpoints) AS endpoints,(SELECT COUNT(*) FROM deliveries WHERE status='failed') AS failed",
+  ).first();
+  const age = backlog?.oldest ? Math.max(0, Date.now() - Date.parse(backlog.oldest)) : 0;
+  return c.json(
+    {
+      status: age > 900000 ? "degraded" : "ok",
+      backlog: { ...backlog, oldest_age_ms: age },
+      counts,
+      usage: usage.results,
+      webhook_configured: webhookEnabled(c.env),
+      email_configured: emailEnabled(c.env),
+      delivery_paused: c.env.DELIVERY_ENABLED === "false",
+    },
+    age > 900000 ? 503 : 200,
+  );
+});
 app.post("/api/admin/sync", async (c) => {
   const value = c.req.header("authorization")?.replace(/^Bearer /, "") || "";
   if (!c.env.ADMIN_TOKEN || !(await equal(value, c.env.ADMIN_TOKEN)))
     return c.json({ error: "Unauthorized" }, 401);
+  await maintain(c.env);
   await encryptLegacyDestinations(c.env);
   const result = await sync(c.env);
   await drain(c.env);
@@ -449,6 +493,10 @@ app.get("*", async (c) => {
   return c.html(<ErrorPage message="We couldn’t find that page." />, 404);
 });
 app.onError((err, c) => {
+  if (err instanceof BudgetError) {
+    c.header("Retry-After", String(3600 - (Math.floor(Date.now() / 1000) % 3600)));
+    return c.html(<ErrorPage message={err.message} />, 429);
+  }
   console.error(JSON.stringify({ event: "request_failed", name: err.name }));
   return c.html(
     <ErrorPage message="The request couldn’t be completed. Please try again shortly." />,
@@ -459,6 +507,7 @@ export default {
   fetch: app.fetch,
   async scheduled(_event, env, _ctx) {
     try {
+      await maintain(env);
       await encryptLegacyDestinations(env);
       await sync(env);
     } finally {

@@ -186,6 +186,35 @@ export function Settings({
             )}
             <button class="button secondary">Replace token and sign out other devices</button>
           </form>
+          <h2 class="panel-subheading">Delete workspace</h2>
+          <p>
+            Permanently remove this workspace, destinations, credentials and delivery history. An
+            in-flight notification cannot be recalled.
+          </p>
+          <form
+            method="post"
+            action="/settings/delete"
+            data-confirm="Permanently delete this workspace and all its delivery history?">
+            <label for="delete-token">
+              Current management token (or confirm GitHub identity above)
+            </label>
+            <input
+              id="delete-token"
+              name="current_token"
+              type="password"
+              autocomplete="off"
+              maxlength={128}
+            />
+            <label for="delete-confirm">Type DELETE to confirm</label>
+            <input
+              id="delete-confirm"
+              name="confirm"
+              pattern="DELETE"
+              required
+              autocomplete="off"
+            />
+            <button class="button secondary">Permanently delete workspace</button>
+          </form>
         </div>
         <div class="form-panel">
           <h2>Notification addresses</h2>
@@ -351,12 +380,14 @@ export function Dashboard({
   emails,
   email,
   webhook,
+  deliveryPaused,
   message,
 }: {
   endpoints: Endpoint[];
   emails: EmailAddressRow[];
   email: boolean;
   webhook: boolean;
+  deliveryPaused: boolean;
   message?: string;
 }) {
   return (
@@ -372,6 +403,11 @@ export function Dashboard({
           </p>
         )}
       </>
+      {deliveryPaused && (
+        <p class="notice">
+          The operator has temporarily paused delivery. Pending notifications are retained.
+        </p>
+      )}
       <p class="lead">One advisory. Every subscribed codebase. Choose where each signal goes.</p>
       <div class="dashboard-grid">
         <div>
@@ -448,7 +484,7 @@ export function Dashboard({
                     action={`/endpoints/${e.id}/test`}>
                     <button
                       class="button secondary"
-                      disabled={e.status !== "active" || !ready}>
+                      disabled={e.status !== "active" || !ready || deliveryPaused}>
                       Send test
                     </button>
                   </form>

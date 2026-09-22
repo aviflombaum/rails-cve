@@ -1,3 +1,4 @@
+import { reserve, BudgetError } from "./abuse";
 import { forwardWebhook, webhookEnabled } from "./egress";
 import { MAX_EVENT_BYTES, eventBytes } from "./limits";
 import { readDestination } from "./destinations";
@@ -65,6 +66,7 @@ export async function enqueueTest(env: Env, endpoint: Endpoint) {
   return id;
 }
 export async function drain(env: Env) {
+  if (env.DELIVERY_ENABLED === "false") return;
   // Finalize expired last attempts without sending a ninth request. The receiver
   // may have accepted the interrupted attempt, so never claim non-delivery.
   const exhausted =
@@ -80,13 +82,24 @@ export async function drain(env: Env) {
     ).bind(interrupted, now),
   ]);
   const { results } = await env.DB.prepare(
-    "SELECT d.id FROM deliveries d JOIN endpoints e ON e.id=d.endpoint_id WHERE d.status IN ('pending','retry','sending') AND d.attempts<8 AND d.next_at<=? AND e.status='active' AND ((d.channel='webhook' AND ?=1) OR (d.channel='email' AND ?=1)) ORDER BY d.next_at,d.created_at LIMIT 25",
+    "SELECT id,account_id FROM (SELECT d.id,e.account_id,d.next_at,d.created_at,ROW_NUMBER() OVER (PARTITION BY e.account_id ORDER BY d.next_at,d.created_at,d.id) AS tenant_rank FROM deliveries d JOIN endpoints e ON e.id=d.endpoint_id WHERE d.status IN ('pending','retry','sending') AND d.attempts<8 AND d.next_at<=? AND e.status='active' AND ((d.channel='webhook' AND ?=1) OR (d.channel='email' AND ?=1)) AND NOT EXISTS(SELECT 1 FROM usage_buckets u WHERE u.operation='delivery' AND u.scope=e.account_id AND u.window_start=? AND u.used>=60)) WHERE tenant_rank<=5 ORDER BY tenant_rank,next_at,created_at,id LIMIT 25",
   )
-    .bind(Date.now(), webhookEnabled(env) ? 1 : 0, emailEnabled(env) ? 1 : 0)
-    .all<{ id: string }>();
+    .bind(
+      Date.now(),
+      webhookEnabled(env) ? 1 : 0,
+      emailEnabled(env) ? 1 : 0,
+      Math.floor(Date.now() / 3600000) * 3600000,
+    )
+    .all<{ id: string; account_id: string }>();
   for (let i = 0; i < results.length; i += 5)
     await Promise.all(
-      results.slice(i, i + 5).map(async ({ id }) => {
+      results.slice(i, i + 5).map(async ({ id, account_id }) => {
+        try {
+          await reserve(env, "delivery", account_id);
+        } catch (error) {
+          if (error instanceof BudgetError) return;
+          throw error;
+        }
         const lease = crypto.randomUUID();
         const row = await env.DB.prepare(
           "UPDATE deliveries SET status='sending',lease=?,next_at=?,attempts=attempts+1 WHERE id=? AND status IN ('pending','retry','sending') AND attempts<8 AND next_at<=? RETURNING *",

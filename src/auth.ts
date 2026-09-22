@@ -21,11 +21,16 @@ export async function currentAccount(c: Context<App>) {
   const value = credential(c);
   if (!value) return null;
   const digest = await hash(value);
-  return c.env.DB.prepare(
+  const account = await c.env.DB.prepare(
     "SELECT a.*, EXISTS(SELECT 1 FROM sessions s WHERE s.account_id=a.id AND s.token_hash=? AND s.auth_version=a.auth_version AND s.expires_at>? AND s.recovery_until>?) AS recovery_ready FROM accounts a WHERE a.token_hash=? OR EXISTS(SELECT 1 FROM sessions s WHERE s.account_id=a.id AND s.token_hash=? AND s.expires_at>? AND s.auth_version=a.auth_version)",
   )
     .bind(digest, Date.now(), Date.now(), digest, digest, Date.now())
     .first<Account>();
+  if (account)
+    await c.env.DB.prepare("UPDATE accounts SET last_active_at=? WHERE id=? AND last_active_at<?")
+      .bind(Date.now(), account.id, Date.now() - 86400000)
+      .run();
+  return account;
 }
 export async function auth(c: Context<App>, next: Next) {
   const account = await currentAccount(c);
@@ -48,6 +53,11 @@ export async function session(c: Context<App>, accountId: string, version = 0, r
     )
     .run();
   if (!result.meta.changes) throw new Error("Authentication changed; sign in again");
+  await c.env.DB.prepare(
+    "DELETE FROM sessions WHERE account_id=? AND token_hash NOT IN (SELECT token_hash FROM sessions WHERE account_id=? ORDER BY (token_hash=?) DESC,expires_at DESC,token_hash DESC LIMIT 20)",
+  )
+    .bind(accountId, accountId, await hash(value))
+    .run();
   setCookie(c, "rcve_session", value, {
     httpOnly: true,
     secure: new URL(c.req.url).protocol === "https:",

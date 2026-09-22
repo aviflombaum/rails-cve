@@ -1,3 +1,4 @@
+import { reserve, maintain } from "../src/abuse";
 import { MAX_EVENT_BYTES, eventBytes } from "../src/limits";
 import { readDestination, encryptLegacyDestinations } from "../src/destinations";
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
@@ -32,6 +33,7 @@ beforeEach(async () => {
   );
   await bindings.DB.batch(
     [
+      "usage_buckets",
       "delivery_attempts",
       "deliveries",
       "events",
@@ -1363,4 +1365,280 @@ describe("subscription readiness after mailbox removal", () => {
       }
     },
   );
+});
+
+async function used(operation: string, scope: string, count: number) {
+  await bindings.DB.prepare("INSERT OR REPLACE INTO usage_buckets VALUES(?,?,?,?)")
+    .bind(operation, scope, Math.floor(Date.now() / 3600000) * 3600000, count)
+    .run();
+}
+describe("service-wide abuse controls", () => {
+  it("caps distributed signup atomically without creating rejected accounts", async () => {
+    const responses = await Promise.all(
+      Array.from({ length: 28 }, () => request("/accounts", post({}))),
+    );
+    expect(responses.filter((r) => r.status === 200)).toHaveLength(25);
+    expect(responses.filter((r) => r.status === 429)).toHaveLength(3);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM accounts").first("n")).toBe(25);
+    expect(
+      await bindings.DB.prepare(
+        "SELECT used FROM usage_buckets WHERE operation='signup' AND scope='global'",
+      ).first("used"),
+    ).toBe(25);
+    const disabled = await request("/accounts", post({}), {
+      ...bindings,
+      SIGNUPS_ENABLED: "false",
+    });
+    expect(await disabled.text()).toContain("temporarily paused");
+  });
+  it("enforces global mail budgets across different accounts and recipients", async () => {
+    await endpoint();
+    await bindings.DB.prepare(
+      "INSERT INTO accounts(id,token_hash) VALUES('other','otherhash')",
+    ).run();
+    const mail = mailEnvironment();
+    await used("verification_email", "global", 99);
+    const outcomes = await Promise.allSettled([
+      requestVerification(mail.env, "acct", "first@example.org"),
+      requestVerification(mail.env, "other", "second@example.org"),
+    ]);
+    expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+    expect(mail.send).toHaveBeenCalledTimes(1);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM email_addresses").first("n")).toBe(1);
+  });
+  it("separates account and operation quotas and reports a retry time in the UI", async () => {
+    const ep = await endpoint();
+    await used("test", "acct", 5);
+    const response = await request("/endpoints/ep/test", post({}));
+    expect(response.status).toBe(429);
+    expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM events").first("n")).toBe(0);
+    await expect(reserve(bindings, "verification_webhook", ep.account_id)).resolves.toBeUndefined();
+    await expect(reserve(bindings, "test", "other")).resolves.toBeUndefined();
+    expect(
+      await bindings.DB.prepare(
+        "SELECT used FROM usage_buckets WHERE operation='test' AND scope='global'",
+      ).first("used"),
+    ).toBe(1);
+  });
+  it("shares the signup ceiling with GitHub registration while allowing existing login", async () => {
+    const config = oauthEnv();
+    await used("signup", "global", 25);
+    const start = await startOAuth();
+    githubIdentity(123, "new-user");
+    const response = await request(
+      `/auth/github/callback?state=${start.state}&code=fake`,
+      { headers: { Cookie: start.cookie } },
+      config,
+    );
+    expect(response.status).toBe(429);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM accounts").first("n")).toBe(0);
+    await endpoint();
+    await bindings.DB.prepare("UPDATE accounts SET github_id='123' WHERE id='acct'").run();
+    const existing = await startOAuth();
+    expect(
+      (
+        await request(
+          `/auth/github/callback?state=${existing.state}&code=fake`,
+          { headers: { Cookie: existing.cookie } },
+          config,
+        )
+      ).status,
+    ).toBe(303);
+  });
+  it("caps account and endpoint inventory even below hourly budgets", async () => {
+    await endpoint();
+    await bindings.DB.prepare(
+      "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<999) INSERT INTO accounts(id,token_hash) SELECT 'capacity-'||x,'capacity-hash-'||x FROM n",
+    ).run();
+    expect((await request("/accounts", post({}))).status).toBe(429);
+    await bindings.DB.prepare(
+      "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<999) INSERT INTO endpoints(id,account_id,name,url,secret,challenge) SELECT 'capacity-'||x,'capacity-'||x,'Synthetic','https://receiver.example.net','sealed','challenge' FROM n",
+    ).run();
+    expect(
+      (
+        await request(
+          "/endpoints",
+          post({ name: "Too many", url: "https://receiver.example.net/new" }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM endpoints").first("n")).toBe(1000);
+    await bindings.DB.prepare(
+      "INSERT INTO email_addresses(id,account_id,address,verified_at) SELECT id,id,id||'@example.org','2026-09-22' FROM accounts",
+    ).run();
+    await bindings.DB.prepare(
+      "UPDATE endpoints SET status='active',webhook_verified=1,delivery_mode='both',email_id=account_id",
+    ).run();
+    await ingest(bindings, [a]);
+    await ingest(bindings, [{ ...a, title: "Capacity fanout" }]);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM deliveries").first("n")).toBe(2000);
+    expect((await bindings.DB.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
+  });
+  it("limits each tenant to five rows per drain so a noisy account cannot occupy the batch", async () => {
+    const ep = await endpoint();
+    await bindings.DB.prepare(
+      "INSERT INTO accounts(id,token_hash) VALUES('other','otherhash')",
+    ).run();
+    await bindings.DB.prepare(
+      "INSERT INTO endpoints(id,account_id,name,url,secret,status,challenge,webhook_verified) SELECT 'other-ep','other','Other',url,secret,'active',challenge,1 FROM endpoints WHERE id='ep'",
+    ).run();
+    for (let i = 0; i < 8; i++) await enqueueTest(bindings, ep);
+    await enqueueTest(bindings, { ...ep, id: "other-ep", account_id: "other" });
+    network();
+    await drain(bindings);
+    expect(
+      await bindings.DB.prepare(
+        "SELECT COUNT(*) n FROM deliveries WHERE endpoint_id='ep' AND status='delivered'",
+      ).first("n"),
+    ).toBe(5);
+    expect(
+      await bindings.DB.prepare("SELECT status FROM deliveries WHERE endpoint_id='other-ep'").first(
+        "status",
+      ),
+    ).toBe("delivered");
+    await used("delivery", "global", 300);
+    await drain(bindings);
+    expect(await bindings.DB.prepare("SELECT SUM(attempts) n FROM deliveries").first("n")).toBe(6);
+  });
+  it("exposes backlog age and aggregate budgets only to the operator", async () => {
+    const ep = await endpoint();
+    await enqueueTest(bindings, ep);
+    await bindings.DB.prepare("UPDATE deliveries SET created_at='2020-01-01T00:00:00.000Z'").run();
+    expect((await request("/api/admin/health")).status).toBe(401);
+    expect(
+      (await request("/api/admin/health", { headers: { Authorization: "Bearer management" } }))
+        .status,
+    ).toBe(401);
+    const response = await request("/api/admin/health", {
+      headers: { Authorization: "Bearer test-admin" },
+    });
+    expect(response.status).toBe(503);
+    const text = await response.text();
+    expect(text).not.toContain("receiver.example");
+    expect(text).not.toContain("acct");
+    expect(JSON.parse(text).backlog.pending).toBe(1);
+  });
+});
+describe("retention and account deletion", () => {
+  it("purges old terminal history and orphan tests but preserves live notifications", async () => {
+    const ep = await endpoint();
+    await enqueueTest(bindings, ep);
+    await enqueueTest(bindings, ep);
+    const rows = (
+      await bindings.DB.prepare("SELECT id,event_id FROM deliveries ORDER BY id").all<{
+        id: string;
+        event_id: string;
+      }>()
+    ).results;
+    await bindings.DB.prepare("UPDATE events SET created_at='2020-01-01T00:00:00.000Z'").run();
+    await bindings.DB.prepare("UPDATE deliveries SET status='failed',completed_at=1 WHERE id=?")
+      .bind(rows[0].id)
+      .run();
+    await bindings.DB.prepare(
+      "INSERT INTO delivery_attempts(id,delivery_id,attempt,status) VALUES('old',?,8,'failed')",
+    )
+      .bind(rows[0].id)
+      .run();
+    await bindings.DB.prepare(
+      "UPDATE deliveries SET created_at='2020-01-01T00:00:00.000Z',completed_at=1 WHERE id=?",
+    )
+      .bind(rows[1].id)
+      .run();
+    await maintain(bindings);
+    expect(await bindings.DB.prepare("SELECT id,status FROM deliveries").first()).toEqual({
+      id: rows[1].id,
+      status: "pending",
+    });
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM delivery_attempts").first("n")).toBe(
+      0,
+    );
+    expect(await bindings.DB.prepare("SELECT id FROM events").first("id")).toBe(rows[1].event_id);
+  });
+  it("expires abandoned unverified accounts and temporary records, retaining verified and active accounts", async () => {
+    await endpoint();
+    await bindings.DB.prepare("UPDATE accounts SET created_at='2020-01-01T00:00:00.000Z'").run();
+    await bindings.DB.prepare(
+      "INSERT INTO accounts(id,token_hash,created_at) VALUES('abandoned','unused','2020-01-01T00:00:00.000Z'),('recent','recenthash','2020-01-01T00:00:00.000Z')",
+    ).run();
+    await bindings.DB.prepare("UPDATE accounts SET last_active_at=? WHERE id='recent'")
+      .bind(Date.now())
+      .run();
+    await bindings.DB.prepare(
+      "INSERT INTO endpoints(id,account_id,name,url,secret,challenge) VALUES('abandoned-ep','abandoned','Pending','https://receiver.example.net','sealed','challenge')",
+    ).run();
+    await bindings.DB.prepare("INSERT INTO email_cooldowns VALUES('expired',1)").run();
+    await bindings.DB.prepare(
+      "INSERT INTO email_addresses(id,account_id,address,expires_at) VALUES('expired','abandoned','old@example.org',1)",
+    ).run();
+    await bindings.DB.prepare(
+      "INSERT INTO sessions(token_hash,account_id,expires_at) VALUES('expired','abandoned',1)",
+    ).run();
+    await maintain(bindings);
+    expect(
+      (await bindings.DB.prepare("SELECT id FROM accounts ORDER BY id").all()).results,
+    ).toEqual([{ id: "acct" }, { id: "recent" }]);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM email_cooldowns").first("n")).toBe(0);
+    expect((await bindings.DB.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
+  });
+  it("requires fresh proof to delete an account and preserves other tenants", async () => {
+    const ep = await endpoint();
+    await verifiedAddress();
+    await enqueueTest(bindings, ep);
+    await bindings.DB.prepare(
+      "INSERT INTO accounts(id,token_hash) VALUES('other','otherhash')",
+    ).run();
+    await bindings.DB.prepare(
+      "INSERT INTO sessions(token_hash,account_id,expires_at) VALUES(?,'acct',?)",
+    )
+      .bind(await hash("stolen-session"), Date.now() + 60000)
+      .run();
+    expect(
+      (await request("/settings/delete", post({ confirm: "DELETE" }, "stolen-session"))).status,
+    ).toBe(403);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM accounts").first("n")).toBe(2);
+    expect((await request("/settings/delete", post({ confirm: "DELETE" }))).status).toBe(303);
+    expect((await bindings.DB.prepare("SELECT id FROM accounts").all()).results).toEqual([
+      { id: "other" },
+    ]);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM endpoints").first("n")).toBe(0);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM sessions").first("n")).toBe(0);
+    expect((await bindings.DB.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
+  });
+});
+
+describe("operator pauses and session storage", () => {
+  it("holds deliveries and blocks verification before sending", async () => {
+    const ep = await endpoint("pending");
+    const paused = { ...bindings, DELIVERY_ENABLED: "false", VERIFICATIONS_ENABLED: "false" };
+    expect((await request("/endpoints/ep/verify", post({}), paused)).status).toBe(429);
+    const mail = mailEnvironment();
+    await expect(
+      requestVerification(
+        { ...mail.env, VERIFICATIONS_ENABLED: "false" },
+        "acct",
+        "paused@example.org",
+      ),
+    ).rejects.toThrow("paused");
+    expect(mail.send).not.toHaveBeenCalled();
+    await bindings.DB.prepare("UPDATE endpoints SET status='active',webhook_verified=1").run();
+    await enqueueTest(bindings, ep);
+    await drain(paused);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await bindings.DB.prepare("SELECT attempts FROM deliveries").first("attempts")).toBe(0);
+    const html = await (
+      await request("/dashboard", { headers: { Authorization: "Bearer management" } }, paused)
+    ).text();
+    expect(html).toContain("temporarily paused delivery");
+    expect(html).toMatch(/disabled[^>]*>\s*Send test/);
+  });
+  it("bounds successful browser sessions without changing account credentials", async () => {
+    await endpoint();
+    for (let i = 0; i < 22; i++)
+      expect((await request("/session", post({ token: "management" }))).status).toBe(303);
+    expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM sessions").first("n")).toBe(20);
+    expect(await bindings.DB.prepare("SELECT token_hash FROM accounts").first("token_hash")).toBe(
+      await hash("management"),
+    );
+  });
 });

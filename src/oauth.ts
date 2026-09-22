@@ -1,3 +1,4 @@
+import { reserve, BudgetError } from "./abuse";
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { currentAccount, credential, githubEnabled, session, type App, type Account } from "./auth";
@@ -46,6 +47,7 @@ routes.post("/auth/github", async (c) => {
   }
 
   if (purpose === "recovery" && !account?.github_id) return fail("account_changed");
+  await reserve(c.env, "oauth", account?.id);
   const state = token(),
     browser = token(),
     verifier = token();
@@ -192,9 +194,10 @@ routes.get("/auth/github/callback", async (c) => {
       if (!linked.meta.changes) return fail("account_changed");
       account = current;
     } else if (!account) {
+      await reserve(c.env, "signup");
       // Conflict-safe concurrent first login. Never merge by email or display name.
       await c.env.DB.prepare(
-        "INSERT OR IGNORE INTO accounts(id,token_hash,name,github_id,github_login) VALUES(?,?,?,?,?)",
+        "INSERT OR IGNORE INTO accounts(id,token_hash,name,github_id,github_login) SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM accounts)<1000",
       )
         .bind(crypto.randomUUID(), await hash(token()), user.login, githubId, user.login)
         .run();
@@ -206,7 +209,10 @@ routes.get("/auth/github/callback", async (c) => {
         .bind(user.login, account.id)
         .run();
     }
-    if (!account) return fail("account");
+    if (!account)
+      throw new BudgetError(
+        "This deployment has reached its account capacity. Contact the operator.",
+      );
     stage = "session";
     await session(c, account.id, account.auth_version, row.purpose === "recovery");
     return c.redirect(
@@ -216,6 +222,7 @@ routes.get("/auth/github/callback", async (c) => {
       303,
     );
   } catch (error) {
+    if (error instanceof BudgetError) throw error;
     const message = error instanceof Error ? error.message : "";
     const reason = /redirect/i.test(message)
       ? "redirect"

@@ -185,7 +185,7 @@ CI runs these checks on pull requests and pushes to `main` without production cr
 
 ## Scope and next steps
 
-V1 covers the **published `rails/rails` advisory feed**, not every Ruby gem or every historical Rails CVE. Delivery is at least once, without ordering guarantees or a delivery-time SLA. Automatic retention, global signup quotas, and seamless signing-key rotation aren't implemented yet. Save a recovery token or link GitHub before losing access. The [operations guide](docs/operations.md) documents these limits and the required gateway boundary.
+V1 covers the **published `rails/rails` advisory feed**, not every Ruby gem or every historical Rails CVE. Delivery is at least once, without ordering guarantees or a delivery-time SLA. Service/account budgets and retention are documented in operations; seamless signing-key rotation is not implemented. Save a recovery token or link GitHub before losing access. The [operations guide](docs/operations.md) documents these limits and the required gateway boundary.
 
 A future **GitHub App** could open or update one issue per advisory in opted-in repositories, including the context and agent prompt. That would let teams use their existing issue-to-agent workflow without building a receiver. **GitHub login ships in this branch; repository installation and issue delivery remain planned.**
 

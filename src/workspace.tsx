@@ -1,3 +1,5 @@
+import { BudgetError, accountRemoval } from "./abuse";
+import { deleteCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { auth, githubEnabled, currentAccount, credential, session, type App } from "./auth";
 import { hash, token } from "./security";
@@ -87,11 +89,42 @@ routes.post("/settings/token", async (c) => {
     />,
   );
 });
+routes.post("/settings/delete", async (c) => {
+  const form = await c.req.parseBody();
+  if (form.confirm !== "DELETE")
+    return c.html(<ErrorPage message="Type DELETE to confirm permanent workspace removal." />, 400);
+  const marker = token("deleting_");
+  const proof = String(
+    form.current_token || c.req.header("authorization")?.replace(/^Bearer /, "") || "",
+  );
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare(
+      "UPDATE accounts SET token_hash=?,auth_version=auth_version+1 WHERE id=? AND auth_version=? AND (token_hash=? OR EXISTS(SELECT 1 FROM sessions s WHERE s.account_id=accounts.id AND s.auth_version=accounts.auth_version AND s.token_hash=? AND s.expires_at>? AND s.recovery_until>?)) RETURNING id",
+    ).bind(
+      marker,
+      c.get("accountId"),
+      c.get("authVersion"),
+      await hash(proof),
+      await hash(credential(c)),
+      Date.now(),
+      Date.now(),
+    ),
+    ...accountRemoval(c.env, c.get("accountId"), marker),
+  ]);
+  if (!results[0].meta.changes)
+    return c.html(
+      <ErrorPage message="Enter your management token or freshly confirm your linked GitHub identity before deleting this workspace." />,
+      403,
+    );
+  deleteCookie(c, "rcve_session", { path: "/" });
+  return c.redirect("/connect", 303);
+});
 routes.post("/settings/email", async (c) => {
   const form = await c.req.parseBody();
   try {
     await requestVerification(c.env, c.get("accountId"), String(form.email || ""));
   } catch (error) {
+    if (error instanceof BudgetError) throw error;
     return c.html(<ErrorPage message={(error as Error).message} />, 400);
   }
   return c.redirect("/settings?message=Check%20your%20inbox%20for%20a%20confirmation%20link.", 303);

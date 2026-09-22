@@ -1,3 +1,4 @@
+import { reserve } from "./abuse";
 import { smtpSend } from "./smtp";
 import { hash, token } from "./security";
 export type EmailAddressRow = {
@@ -58,6 +59,7 @@ export async function requestVerification(env: Env, accountId: string, input: st
     .first<{ n: number }>();
   if (!existing && count!.n >= 5)
     throw new Error("You can save up to five notification addresses.");
+  await reserve(env, "verification_email", accountId);
   const cooldown = await env.DB.prepare(
     "INSERT INTO email_cooldowns(address_hash,sent_at) VALUES(?,?) ON CONFLICT(address_hash) DO UPDATE SET sent_at=excluded.sent_at WHERE sent_at<? RETURNING address_hash",
   )

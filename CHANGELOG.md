@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add D1 service/account budgets, inventory caps, tenant-aware draining, operator backlog health, bounded retention and proof-protected account deletion. Apply migration 0004 before deploying.
+
 - Recompute subscription readiness after email removal; disable tests and show missing destinations or unavailable delivery providers accurately.
 
 - Require authenticated pinned-IP egress for webhooks; ship a bounded Node gateway and offline tests. Unconfigured deployments hold webhook deliveries without attempts. Provision the separate gateway before upgrading a webhook deployment.

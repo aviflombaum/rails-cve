@@ -1,6 +1,9 @@
 interface Env {
   ENCRYPTION_KEY: string;
   ADMIN_TOKEN: string;
+  SIGNUPS_ENABLED?: string;
+  VERIFICATIONS_ENABLED?: string;
+  DELIVERY_ENABLED?: string;
   EGRESS_PROXY_URL?: string;
   EGRESS_PROXY_TOKEN?: string;
   GITHUB_TOKEN?: string;

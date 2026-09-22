@@ -20,7 +20,7 @@ This service processes public upstream data and makes outbound requests to subsc
 - Receivers must verify the signature and timestamp before parsing/processing an event, and deduplicate the signed event ID.
 - Webhooks require the [egress gateway](docs/egress.md), which pins a validated public address during connection establishment. Keep both the gateway and relay isolated from private networking; do not bypass this boundary.
 - Store the encryption key outside Git and preserve a secure backup. Replacing it makes existing encrypted endpoint secrets unreadable.
-- The application supports recovery tokens and GitHub linking but has no email-based account recovery, global signup quotas, or automated retention. Review these constraints before a broad public deployment.
+- The application supports recovery tokens, GitHub linking, account deletion, service/account budgets and bounded retention. Email verification is not account recovery. Review the budget, backlog and retention policies before a broad public deployment.
 
 See [operations](docs/operations.md) and [webhooks](docs/webhooks.md) for the complete operational contract. This relay is an additional notification channel, not a replacement for your security program or incident response process.
 
