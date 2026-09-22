@@ -1,0 +1,42 @@
+[
+  {
+    "ghsa_id": "GHSA-xr9x-r78c-5hrm",
+    "cve_id": "CVE-2026-66066",
+    "summary": "Possible arbitrary file read and remote code execution in Active Storage variant processing",
+    "description": "### Impact\r\nIn its default configuration, a Rails application that displays image variants may allow an\r\nunauthenticated attacker to read arbitrary files from the server, including the process environment.\r\nThat environment typically holds `secret_key_base` and often credentials for external systems, which\r\nmay in turn allow escalation to remote code execution or lateral movement to those systems.\r\n\r\n### Details\r\nlibvips reads and writes file formats through \"loaders\" and \"savers\" (or more generally\r\n\"operations\"), many of which are backed by third-party libraries. It marks some of these operations\r\nas \"unfuzzed\", meaning they are unsafe for untrusted content, and several handle formats unrelated\r\nto web images. Active Storage did not disable the unfuzzed operations, so an attacker who can upload\r\na crafted file and cause a variant to be generated from it may be able to invoke one.\r\n\r\nWe are aware of a mechanism by which an attacker, by uploading a crafted file, is able to cause\r\ndisclosure of the contents of arbitrary files accessible on the filesystem of the targeted\r\napplication. One specific attack chain has been reported to us (see \"Disclosure\" below), but we do\r\nnot assume it is the only one that exists.\r\n\r\n### Affected applications\r\nAn application is affected if it meets all of these requirements:\r\n- Uses libvips for Active Storage image processing. This is `config.active_storage.variant_processor = :vips`,\r\n  which `load_defaults 7.0` set and no later default has changed.\r\n- Allows image uploads from untrusted users.\r\n\r\nGenerating variants is not a separate requirement.\r\n\r\n### Mitigation\r\n- Upgrade to a fixed version of `activestorage`.\r\n- The minimum version of libvips must be upgraded to `>= 8.13`.\r\n- Change `secret_key_base` and change any secrets accessible in the application environment (see \"Expire and change secrets\" below)\r\n\r\nEarlier versions of libvips (`< 8.13`) cannot disable unfuzzed operations at all, and Active Storage\r\nwill raise an exception during boot in such an unsecurable environment.\r\n\r\n### Expire and change secrets\r\n\r\nUpgrading closes the vulnerability but does not undo an exfiltrated secret if that already\r\noccurred. An affected application should treat every secret readable by the application process as\r\npotentially exposed and change it, including:\r\n\r\n- `secret_key_base`\r\n- The master key, whether stored in `config/master.key` or supplied as `RAILS_MASTER_KEY`, along\r\n  with everything in `config/credentials.yml.enc` that it decrypts\r\n- Credentials for the Active Storage service, such as S3, GCS, or Azure keys\r\n- Database credentials\r\n- Tokens and keys for any third-party service the application calls\r\n\r\nChanging `secret_key_base` expires active sessions and requires users to log in again. Encrypted\r\ncookies, signed cookies, signed global IDs, and Active Storage URLs are also affected.\r\n\r\nRotation should only be used as an intermediate step if necessary. Do not retain an exposed secret\r\nas a fallback.\r\n\r\n### Workarounds\r\nIf libvips `< 8.13` is being used, there are no workarounds available other than removing the\r\ndependency on libvips from the application. Some applications may have `ruby-vips` declared as a\r\ndependency only for image analysis, and those applications may be able to simply remove `ruby-vips`\r\nfrom the Gemfile to remove libvips from the application. Applications that do not use Active Storage\r\ncan remove `ruby-vips` from the Gemfile to avoid the boot-time checks.\r\n\r\nIf libvips `>= 8.13` is present on the system, applications can disable the unfuzzed operations\r\nwithout upgrading Rails by setting the `VIPS_BLOCK_UNTRUSTED` environment variable, which libvips\r\nreads while initializing.\r\n\r\nApplications also running ruby-vips `>= 2.2.1` or later can instead call\r\n`Vips.block_untrusted(true)` from an initializer.\r\n\r\n### Releases\r\nThe fixed releases are available at the normal locations.\r\n\r\n### Versions affected\r\n\r\n- activestorage < 7.2.3.2\r\n- activestorage >= 8.0, < 8.0.5.1\r\n- activestorage >= 8.1, < 8.1.3.1\r\n\r\n### Disclosure\r\nTechnical details of the attack chain are intentionally omitted from this advisory. They would add\r\nnothing to an administrator's decision to upgrade, while making it substantially easier to attack\r\napplications that have not yet done so.\r\n\r\nDetails will be disclosed no later than 2026-08-28, via the [Rails Security\r\nAnnouncements](https://discuss.rubyonrails.org/c/security-announcements/9) forum.\r\n\r\n### Credit\r\nThis issue was responsibly reported by [0xacb](https://x.com/0xacb), [s3np41k1r1t0](https://x.com/s3np41k1r1t0) and [castilho](https://x.com/castilho101) from [Ethiack](https://ethiack.com), and [RyotaK](https://ryotak.net) from [GMO Flatt Security Inc.](https://flatt.tech/en/).\r\n\r\n### References\r\n- libvips 8.13 release notes, [blocking of unfuzzed loaders](https://www.libvips.org/2022/05/28/What's-new-in-8.13.html#blocking-of-unfuzzed-loaders)\r\n- W.A. Arbaugh, W.L. Fithen, and J. McHugh, [\"Windows of Vulnerability: A Case Study\r\n  Analysis\"](https://doi.org/10.1109/2.889093), IEEE Computer 33(12), December 2000\r\n- https://ethiack.com/info-hub/research/kindarails2shell-rails-rce-cve\r\n- https://blog.flatt.tech/entry/kindarails2shell_rails\r\n",
+    "severity": "critical",
+    "published_at": "2026-07-29T15:09:37Z",
+    "updated_at": "2026-07-29T15:09:37Z",
+    "withdrawn_at": null,
+    "vulnerabilities": [
+      {
+        "package": {
+          "ecosystem": "rubygems",
+          "name": "activestorage"
+        },
+        "vulnerable_version_range": "< 7.2.3.2",
+        "patched_versions": "7.2.3.2",
+        "vulnerable_functions": []
+      },
+      {
+        "package": {
+          "ecosystem": "rubygems",
+          "name": "activestorage"
+        },
+        "vulnerable_version_range": ">= 8.0, < 8.0.5.1",
+        "patched_versions": "8.0.5.1",
+        "vulnerable_functions": []
+      },
+      {
+        "package": {
+          "ecosystem": "rubygems",
+          "name": "activestorage"
+        },
+        "vulnerable_version_range": ">= 8.1, < 8.1.3.1",
+        "patched_versions": "8.1.3.1",
+        "vulnerable_functions": []
+      }
+    ],
+    "state": "published"
+  }
+]

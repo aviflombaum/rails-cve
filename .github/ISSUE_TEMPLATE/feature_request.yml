@@ -1,0 +1,17 @@
+name: Feature request
+description: Suggest an improvement or integration.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the maintainer workflow and who benefits.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include alternatives, permission needs, and tradeoffs where relevant.
+    validations:
+      required: true

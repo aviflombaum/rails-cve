@@ -1,0 +1,13 @@
+node_modules/
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
+.secrets*
+output/
+.DS_Store
+
+# Personal Cloudflare targets and generated binding types
+wrangler.deploy.jsonc
+wrangler.production.jsonc
+worker-configuration.d.ts

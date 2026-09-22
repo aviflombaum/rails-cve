@@ -1,0 +1,30 @@
+name: Bug report
+description: Report unexpected behavior in Rails CVE.
+body:
+  - type: markdown
+    attributes:
+      value: "Security issue? Please follow SECURITY.md instead of filing a public report. Never include tokens, webhook secrets, private endpoint URLs, or production data."
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the actual and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include a minimal, sanitized example or failing test.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit, operating system, Bun/Node versions, and local or self-hosted deployment.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots
+      description: Remove sensitive information before attaching.
