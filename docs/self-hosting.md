@@ -2,13 +2,15 @@
 
 This guide deploys the relay to **your own** Cloudflare account. Local development requires no account; follow the README first. Hosting may incur Cloudflare usage charges.
 
-For a copy/paste deployment brief and Cloudflare deploy-button research, see [Deploy with your agent](deploy-with-agent.md). A public repository URL is required for the button flow.
+For a copy/paste deployment brief and Cloudflare deploy-button research, see [Deploy with your agent](deploy-with-agent.md). The [Deploy to Cloudflare button](https://deploy.workers.cloudflare.com/?url=https://github.com/aviflombaum/rails-cve) imports the public repository into your account.
 
 ## 1. Prepare a deployment config
 
-Install dependencies and authenticate:
+Clone [aviflombaum/rails-cve](https://github.com/aviflombaum/rails-cve) or your fork, then install dependencies and authenticate:
 
 ```sh
+git clone https://github.com/aviflombaum/rails-cve.git
+cd rails-cve
 bun install --frozen-lockfile
 bunx wrangler login
 bunx wrangler whoami

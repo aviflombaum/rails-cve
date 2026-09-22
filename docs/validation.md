@@ -79,3 +79,12 @@ Typecheck and all 14 runtime tests passed. agent-browser verified desktop/mobile
 - Deployment dry-run passed. agent-browser confirmed the live Continue with GitHub button redirects to GitHub's sign-in page. A non-mutating client-authenticated token check returned the expected not-found response for a deliberately invalid probe token.
 - A manual canonical source refresh succeeded; `/api/health` returned HTTP 200 with `status=ok`. Public integration guides returned HTTP 200.
 - The verification browser was not signed into GitHub, so end-user consent and successful callback completion have not been live-tested. No real email was sent, and no GitHub installation or issue bot was enabled.
+
+## Public repository links and callback diagnostics — 2026-09-22
+
+- Public source and deployment-agent guide now link to `aviflombaum/rails-cve` in the README, integration prompt, navigation and footer. The CI badge targets the real main-branch workflow.
+- Formatting, generated binding types, TypeScript and all 39 Workers-runtime tests passed. Production-config deployment dry run passed.
+- Added regression coverage for refreshing legacy cookies before GitHub linking and for callback diagnostics that omit provider bodies and credentials. Existing state replay, expiry, browser binding and account conflict tests still pass.
+- Deployed the source-link and callback changes. agent-browser confirmed GitHub icons/links, desktop and 390px mobile pages without horizontal overflow, the published self-host prompt and the callback recovery page.
+- Production GitHub credentials pass an invalid-code exchange probe; a real authenticated callback still requires a fresh user authorization. The original generic error did not record enough detail to establish its cause. New failures expose a safe stage/reference for diagnosis.
+- The Cloudflare import button targets the public repository; fresh-account resource provisioning has not been independently exercised.

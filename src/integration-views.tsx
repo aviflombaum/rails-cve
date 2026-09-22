@@ -102,9 +102,14 @@ export function IntegrationGuide({ slug }: { slug: keyof typeof guides }) {
             </ol>
             {slug === "self-host" && (
               <p>
-                Cloudflare supports deploy buttons that provision resources. A working button needs
-                this project’s published repository URL. This prompt also works from a local
-                checkout.
+                <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/aviflombaum/rails-cve">
+                  Deploy to Cloudflare →
+                </a>{" "}
+                or use the agent prompt below. Follow the{" "}
+                <a href="https://github.com/aviflombaum/rails-cve/blob/main/docs/deploy-with-agent.md">
+                  setup guide on GitHub
+                </a>{" "}
+                to configure your account, secrets, app URL, and build command.
               </p>
             )}
           </div>

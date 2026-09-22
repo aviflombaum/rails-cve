@@ -39,6 +39,21 @@ With both credentials present, `/connect` and `/login` display Continue with Git
 
 Test registration, logout/login, an existing workspace link, canceled authorization, rejected/reused state, and mismatched browser cookies. Test on your actual callback origin; mocks cannot validate GitHub's registration settings. Keep a recovery token in a password manager.
 
+## Troubleshooting sign-in
+
+Restart at `/login` (or `/settings` when linking) in the same browser. Callback URLs contain one-time codes and must not be reused or shared. Authorization state expires after ten minutes. Keep cookies enabled for your deployment origin.
+
+Failed callbacks show a stage and a random reference. Operators can match that reference to the `github_signin_failed` Worker log. Logs include only the stage, reference and available HTTP status; provider bodies, tokens, codes, state and cookies are omitted.
+
+- `browser` / `state`: missing browser binding, expired, replaced or already-used sign-in. Start again in one tab.
+- `authorization`: GitHub did not return an authorization code, or the user canceled.
+- `account_changed`: the workspace at callback differs from the one that started linking. Restore that workspace and restart. Existing authenticated sessions are refreshed with SameSite=Lax before leaving for GitHub so legacy Strict cookies do not break the return trip.
+- `token`: check the Client ID, current client secret, exact callback URL, and GitHub availability. HTTP 200 can still contain a rejected exchange.
+- `profile`: identity lookup failed; check GitHub availability and response status.
+- `account` / `session`: inspect D1 availability and applied migrations.
+
+A stage identifies where the failure occurred, not its complete cause. Never paste raw callback URLs or provider responses into public bug reports.
+
 ## Minimum permissions for the future issue bot
 
 | Permission | Required level | Why |

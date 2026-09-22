@@ -16,10 +16,14 @@ Signed webhooks. Verified email notifications. Investigation briefs for your cod
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=flat-square&logo=cloudflareworkers&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](tsconfig.json)
 [![Bun](https://img.shields.io/badge/Bun-1.3.14+-282422?style=flat-square&logo=bun&logoColor=white)](https://bun.sh/)
-[![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
+[![CI](https://github.com/aviflombaum/rails-cve/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aviflombaum/rails-cve/actions/workflows/ci.yml)
 [![Contributions welcome](https://img.shields.io/badge/Contributions-welcome-cf3028?style=flat-square)](CONTRIBUTING.md)
 
-[**Try it live ↗**](https://rails-cve.avi.nyc) · [**See a real payload**](https://rails-cve.avi.nyc/docs#example-payload) · [**Run locally**](#run-locally) · [**Self-host**](docs/self-hosting.md) · [**Deploy with your agent**](docs/deploy-with-agent.md) · [**Contribute**](CONTRIBUTING.md)
+[**View source ↗**](https://github.com/aviflombaum/rails-cve) · [**Try it live ↗**](https://rails-cve.avi.nyc) · [**See a real payload**](https://rails-cve.avi.nyc/docs#example-payload) · [**Run locally**](#run-locally) · [**Self-host**](docs/self-hosting.md) · [**Deploy with your agent**](docs/deploy-with-agent.md) · [**Contribute**](CONTRIBUTING.md)
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/aviflombaum/rails-cve)
+
+[**Deployment setup guide**](https://github.com/aviflombaum/rails-cve/blob/main/docs/deploy-with-agent.md) · [**Copy a deployment prompt for your agent**](docs/deploy-with-agent.md#copy-this-prompt-to-your-agent)
 
 </div>
 
@@ -66,13 +70,19 @@ Each guide includes a prompt to give your existing agent. It builds a receiver t
 
 GitHub login and email delivery appear only when their deployment settings are configured. No credentials are included in this repository. The hosted service includes these features; self-hosted instances enable them with their own credentials.
 
+## Deploy your own
+
+Use the **Deploy to Cloudflare** button above or hand the [deployment prompt](docs/deploy-with-agent.md#copy-this-prompt-to-your-agent) to your agent. The guided setup requires your Cloudflare account, two independent secrets, and your final HTTPS `APP_URL`. Set the deploy command to **`bun run deploy:cloudflare`**; the standard deploy command uses a private operator config. Follow the [complete setup steps](docs/deploy-with-agent.md) before the first build. GitHub login and email are optional.
+
 ## Run locally
 
 You'll need **Bun 1.3.14+** and **Node.js 22+** (CI uses Node 24). Wrangler is installed with the project. You do **not** need a Cloudflare account for local development or tests.
 
-Clone your fork or download this repository, then run from its root:
+Clone the public repository (or your fork):
 
 ```sh
+git clone https://github.com/aviflombaum/rails-cve.git
+cd rails-cve
 bun install --frozen-lockfile
 bun run setup
 bun run db:local
@@ -154,11 +164,11 @@ bun run format      # Format application, scripts, and test code
 bunx wrangler deploy --dry-run  # Build/package locally; does not publish
 ```
 
-CI runs these checks on pull requests without production credentials. The CI badge above links to the workflow; it is not a claim that a hosted workflow has already run.
+CI runs these checks on pull requests and pushes to `main` without production credentials. The badge shows the live [GitHub Actions status](https://github.com/aviflombaum/rails-cve/actions/workflows/ci.yml).
 
 | Documentation | What you'll find |
 | :--- | :--- |
-| [Agent-led deployment / Cloudflare button](docs/deploy-with-agent.md) | Copy/paste deployment brief and the prerequisites for a published deploy button. |
+| [Agent-led deployment / Cloudflare button](docs/deploy-with-agent.md) | Live Cloudflare deploy button, required setup, and a copy/paste agent brief. |
 | [GitHub App](docs/integrations/github-app.md) | Login registration, callback URLs, minimal permissions, and the future issue bot. |
 | [Email](docs/integrations/email.md) | Configurable SMTP or Cloudflare transport and verified per-app destinations. |
 | [Account and delivery workflow](docs/accounts.md) | Settings, GitHub linking, email confirmation, and delivery history. |

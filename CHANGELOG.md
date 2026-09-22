@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased — accounts and integrations
+## Unreleased
+
+- Refresh legacy browser sessions before GitHub linking and report safe callback failure references for troubleshooting.
+- Link the public GitHub repository from site navigation and footer with a GitHub icon and View Source label.
+- Add the live Cloudflare import button, real CI status badge, clone instructions, and published deployment-agent guide links.
+
+## Accounts and integrations
 
 - Account settings, expiring browser sessions and recovery-token replacement.
 - GitHub App registration/login and explicit existing-workspace linking, with PKCE and browser-bound single-use state.

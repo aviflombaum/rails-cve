@@ -4,14 +4,14 @@ Thanks for helping make Rails security notifications more useful. Small, focused
 
 ## Before you start
 
-- For a bug, open an issue with reproduction steps and expected behavior. Include versions and sanitized evidence.
+- For a bug, [open an issue](https://github.com/aviflombaum/rails-cve/issues/new/choose) with reproduction steps and expected behavior. Include versions and sanitized evidence.
 - For a large feature, start with an issue describing the maintainer workflow and tradeoffs. Check the [roadmap](docs/plans/002-follow-up.md) first.
 - For a vulnerability, follow [SECURITY.md](SECURITY.md). Do not disclose it in a public issue or PR.
 - For upstream Rails vulnerability reports, use the [Rails security policy](https://github.com/rails/rails/security/policy), not this project's issue tracker.
 
 ## Local workflow
 
-Fork and clone the repository, create a branch, and run:
+[Fork the repository](https://github.com/aviflombaum/rails-cve/fork), clone your fork, create a branch, and run:
 
 ```sh
 bun install --frozen-lockfile

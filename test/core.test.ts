@@ -698,6 +698,67 @@ function githubIdentity(id = 1234, login = "octocat") {
   });
 }
 describe("GitHub App identity", () => {
+  it("refreshes a legacy browser session to SameSite=Lax before linking", async () => {
+    await endpoint();
+    const response = await request(
+      "/auth/github",
+      {
+        method: "POST",
+        headers: {
+          origin: "https://rails-cve.avi.nyc",
+          cookie: "rcve_session=management",
+          "CF-Connecting-IP": `oauth-${++requestNumber}`,
+        },
+      },
+      oauthEnv(),
+    );
+    const cookies = response.headers.getSetCookie();
+    const sessionCookie = cookies.find((value) => value.startsWith("rcve_session="))!;
+    expect(sessionCookie).toContain("SameSite=Lax");
+    expect(sessionCookie).toContain("HttpOnly");
+    expect(sessionCookie).toContain("Secure");
+    const state = new URL(response.headers.get("location")!).searchParams.get("state");
+    githubIdentity();
+    const callback = await request(
+      `/auth/github/callback?state=${state}&code=code`,
+      {
+        headers: { cookie: cookies.map((value) => value.split(";")[0]).join("; ") },
+      },
+      oauthEnv(),
+    );
+    expect(callback.status).toBe(303);
+    expect(
+      await bindings.DB.prepare("SELECT github_id FROM accounts WHERE id='acct'").first(
+        "github_id",
+      ),
+    ).toBe("1234");
+  });
+  it("reports safe failure stages without logging provider bodies or credentials", async () => {
+    const flow = await startOAuth();
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(fetch).mockResolvedValue(
+      Response.json({ error: "secret-provider-body" }, { status: 403 }),
+    );
+    const response = await request(
+      `/auth/github/callback?state=${flow.state}&code=private-code`,
+      { headers: { cookie: flow.cookie } },
+      oauthEnv(),
+    );
+    expect(response.status).toBe(400);
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "github_signin_failed", stage: "token", status: 403 }),
+    );
+    const output = JSON.stringify(log.mock.calls) + (await response.text());
+    for (const secret of [
+      flow.state,
+      flow.cookie,
+      "private-code",
+      "secret-provider-body",
+      "test-client-secret",
+    ])
+      expect(output).not.toContain(secret);
+    log.mockRestore();
+  });
   it("registers with PKCE, consumes state once, and never persists provider tokens", async () => {
     const flow = await startOAuth();
     githubIdentity();

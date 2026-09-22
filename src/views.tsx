@@ -4,6 +4,26 @@ import { examplePayload, examplePreview } from "./examples";
 import type { Child } from "hono/jsx";
 import type { Advisory } from "./advisories";
 import type { Endpoint } from "./delivery";
+function SourceLink() {
+  return (
+    <a
+      class="source-link"
+      href="https://github.com/aviflombaum/rails-cve"
+      target="_blank"
+      rel="noopener noreferrer">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        aria-hidden="true"
+        focusable="false">
+        <path d="M12 .75a11.25 11.25 0 0 0-3.558 21.923c.563.104.769-.244.769-.542 0-.267-.01-.974-.015-1.912-3.13.68-3.79-1.508-3.79-1.508-.512-1.3-1.25-1.646-1.25-1.646-1.023-.7.078-.686.078-.686 1.13.08 1.725 1.16 1.725 1.16 1.005 1.723 2.637 1.225 3.28.937.102-.728.394-1.225.715-1.507-2.5-.284-5.13-1.25-5.13-5.565 0-1.23.44-2.233 1.16-3.02-.117-.285-.503-1.43.11-2.98 0 0 .945-.303 3.094 1.153A10.8 10.8 0 0 1 12 6.18c.957.004 1.922.13 2.823.38 2.147-1.456 3.09-1.153 3.09-1.153.615 1.55.23 2.695.113 2.98.722.787 1.157 1.79 1.157 3.02 0 4.326-2.634 5.278-5.143 5.557.405.35.767 1.042.767 2.1 0 1.516-.014 2.74-.014 3.112 0 .3.203.65.774.54A11.25 11.25 0 0 0 12 .75Z" />
+      </svg>
+      View Source
+    </a>
+  );
+}
 export function Layout({
   title,
   children,
@@ -39,6 +59,7 @@ export function Layout({
         aria-current={active === "dashboard" ? "page" : undefined}>
         Your connections <span aria-hidden="true">↗</span>
       </a>
+      <SourceLink />
     </>
   );
   return (
@@ -184,6 +205,10 @@ export function Layout({
                 </a>
                 <a href="/docs">Webhook documentation</a>
                 <a href="/api/advisories">JSON feed</a>
+                <SourceLink />
+                <a href="https://github.com/aviflombaum/rails-cve/blob/main/docs/deploy-with-agent.md">
+                  Deploy your own →
+                </a>
               </div>
               <p>
                 Built by <a href="https://avi.nyc">Avi Flombaum</a>.<br />

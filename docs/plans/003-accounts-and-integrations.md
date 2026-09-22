@@ -38,4 +38,4 @@ Research links and exact setup steps live in `docs/integrations/`.
 
 ## Additional self-hosting scope
 
-Cloudflare supports deploy buttons with D1 provisioning and secret collection. Added deployment documentation, an agent prompt, `.env.example` declarations and `deploy:cloudflare` for the public configuration. A live button still needs a published repository URL and a fresh-account provisioning test; no nonexistent public URL is advertised.
+Cloudflare supports deploy buttons with D1 provisioning and secret collection. Added deployment documentation, an agent prompt, `.env.example` declarations and `deploy:cloudflare` for the public configuration. The repository is now public at https://github.com/aviflombaum/rails-cve. README and the self-hosting page link to its real Deploy to Cloudflare import flow; a fresh-account provisioning test remains separate from the passing runtime/packaging checks.
