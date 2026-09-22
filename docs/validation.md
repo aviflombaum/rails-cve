@@ -71,3 +71,11 @@ Typecheck and all 14 runtime tests passed. agent-browser verified desktop/mobile
 - agent-browser exercised local signup → settings, display-name save, app creation, pending webhook status, empty and populated delivery log, immutable CVE payload details, integration navigation and clipboard copying. Desktop and 390px mobile screenshots inspected; app/detail/prompt pages have no horizontal document overflow. Private screenshots and fixture data remain ignored.
 - Relative documentation links resolve. Gitleaks passed an isolated candidate public tree; real SMTP credentials and deployment configuration remain ignored, outside the candidate tree.
 - Production was not changed by this branch. GitHub consent/callbacks need a real registered App and credentials; actual SMTP inbox delivery and agent runtime admission remain unverified. OpenClaw/Hermes docs are researched setup recipes, not claims that gateways were installed or contacted. The Cloudflare button flow needs publication and a separate fresh-account test.
+
+## Production GitHub configuration — 2026-09-22
+
+- Backed up production D1 to an ignored protected SQL export before applying migration 0002. All 23 migration statements succeeded.
+- Deployed feature branch commit 4266402 with GitHub Client ID and secret, existing encryption/admin keys, and SMTP configuration. Worker version: `2500dda7-0c26-44de-890d-8fbd178a98a7`. Credentials remain in Cloudflare secrets and ignored mode-0600 local secret storage.
+- Deployment dry-run passed. agent-browser confirmed the live Continue with GitHub button redirects to GitHub's sign-in page. A non-mutating client-authenticated token check returned the expected not-found response for a deliberately invalid probe token.
+- A manual canonical source refresh succeeded; `/api/health` returned HTTP 200 with `status=ok`. Public integration guides returned HTTP 200.
+- The verification browser was not signed into GitHub, so end-user consent and successful callback completion have not been live-tested. No real email was sent, and no GitHub installation or issue bot was enabled.

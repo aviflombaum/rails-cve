@@ -64,7 +64,7 @@ Each guide includes a prompt to give your existing agent. It builds a receiver t
 
 [GitHub App setup →](docs/integrations/github-app.md) · [SMTP / email setup →](docs/integrations/email.md)
 
-GitHub login and email delivery appear only when their deployment settings are configured. No credentials are included in this repository. The branch adds these features; an older hosted deployment may still show the original token/webhook UI.
+GitHub login and email delivery appear only when their deployment settings are configured. No credentials are included in this repository. The hosted service includes these features; self-hosted instances enable them with their own credentials.
 
 ## Run locally
 
