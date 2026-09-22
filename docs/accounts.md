@@ -28,7 +28,7 @@ Up to ten apps per workspace. App names are labels, not version filters. Every a
 
 For webhook/both, save the one-time signing secret on your receiver and choose Verify webhook. A both-mode app can already receive email while its webhook remains unverified. Use [agent guides](integrations/openclaw.md) or the [webhook receiver](webhooks.md) to implement the handshake. Test events should not launch security investigations.
 
-Edit delivery settings to change modes, addresses or URLs. Changing URL creates a new signing secret and requires verification again. Pending deliveries to removed channels/changed destinations are cancelled. Pausing stops new fanout and holds existing queued deliveries; resuming processes queued work. Deleting an app deletes its secret and history.
+Edit delivery settings to change modes, addresses or URLs. Saved webhook paths and queries are hidden; leave the URL field blank to keep the saved destination, or explicitly remove it when switching to email-only. Changing URL creates a new signing secret and requires verification again. Pending deliveries to removed channels/changed destinations are cancelled. Pausing stops new fanout and holds existing queued deliveries; resuming processes queued work. Deleting an app deletes its secret and history.
 
 ## Read the delivery log
 

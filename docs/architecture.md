@@ -63,7 +63,7 @@ New browser logins create independently hashed, expiring 30-day session tokens, 
 
 Notification mailboxes have hashed, expiring confirmation tokens. GET renders a confirmation form; authenticated POST consumes the token for the requesting account. Verification never changes login identity. Per-destination cooldown and per-account caps bound verification abuse.
 
-Each connection has an independently generated signing secret, AES-GCM-encrypted using a Worker secret. A signed challenge proves endpoint control before activation. Destination validation, timeouts, and redirect rejection apply on every attempt.
+Each connection has an independently generated signing secret and a complete destination URL, both AES-GCM-encrypted using a Worker secret. The UI masks destination paths and queries; legacy URL rows are upgraded in bounded scheduled/admin batches. A signed challenge proves endpoint control before activation. Destination validation, timeouts, and redirect rejection apply on every attempt.
 
 Read [SECURITY.md](../SECURITY.md) and [operations](operations.md) for limitations, especially DNS resolution races, key rotation, and recovery. The service never reads subscriber repositories or runs subscriber agents.
 

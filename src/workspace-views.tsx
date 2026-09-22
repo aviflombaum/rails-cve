@@ -306,13 +306,28 @@ function Preferences({
         name="url"
         type="url"
         maxlength={2048}
-        value={endpoint?.url || ""}
-        placeholder="https://your-app.com/webhooks/rails-cve"
+        value=""
+        placeholder={
+          endpoint?.url
+            ? "Leave blank to keep the saved destination"
+            : "https://your-app.com/webhooks/rails-cve"
+        }
       />
       <p class="source-note">
-        Required for webhook or both. Changing this URL requires a new signing secret and
-        verification.
+        {endpoint?.url
+          ? "The saved path and query are hidden. Leave this field blank to keep them. "
+          : "Required for webhook or both. "}
+        Changing this URL requires a new signing secret and verification.
       </p>
+      {endpoint?.url && (
+        <label>
+          <input
+            type="checkbox"
+            name="clear_url"
+          />{" "}
+          Remove the webhook destination (email-only apps)
+        </label>
+      )}
       <label for={`email-${suffix}`}>Verified notification address</label>
       <select
         id={`email-${suffix}`}

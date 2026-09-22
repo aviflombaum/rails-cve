@@ -22,7 +22,7 @@ Failures retry after 5, 10, 20, 40, 80, 160, and 320 minutes, subject to cron ti
 
 ## Monitoring
 
-`GET /api/health` reports the last successful canonical sync; alert if non-200. Worker observability logs report event/delivery ID, attempt, result, and response code, never endpoint secrets or receiver bodies. Traces are enabled. Inspect D1 delivery counts by status to detect backlog; at more than 25 due rows per five minutes, move to Queues consumers plus a reconciler over the same outbox. Cron-trigger changes may take time to propagate after deployment.
+`GET /api/health` reports the last successful canonical sync; alert if non-200. Worker observability logs report event/delivery ID, attempt, result, and response code, never endpoint secrets or receiver bodies. Query strings are redacted from invocation logs and traces are disabled to avoid recording credential-bearing webhook paths. Apply these observability settings to private deployment configs too; review edge/proxy log exports separately. Inspect D1 delivery counts by status to detect backlog; at more than 25 due rows per five minutes, move to Queues consumers plus a reconciler over the same outbox. Cron-trigger changes may take time to propagate after deployment.
 
 Use an authenticated POST to `/api/admin/sync` to force ingestion and a drain. Load the admin token from a protected local secret file into the request inside a script; do not put it in shell arguments. Back up D1 and the encryption key before changing storage or key management. Worker rollback does not undo D1 migrations or restore secrets.
 
@@ -37,6 +37,10 @@ To enable email acceleration later:
 4. Route subsequent mail to the Worker. Check an actual notification's List-ID against the handler, and observe successful canonical sync.
 
 Email routing and subscription are not provisioned by v1, since GitHub polling provides the complete working path without changing domain mail infrastructure. Details: https://developers.cloudflare.com/email-service/api/route-emails/email-handler/.
+
+## Webhook URL encryption upgrade
+
+Webhook URLs are encrypted with the existing ENCRYPTION_KEY and displayed only as an origin. New writes encrypt immediately. Each scheduled or admin sync converts up to 50 legacy plaintext rows using compare-and-swap updates; repeat until `SELECT COUNT(*) FROM endpoints WHERE url<>'' AND url NOT LIKE 'url:v1:%'` returns zero. Back up the key first, keep database backups protected, and retire plaintext backups under your retention policy. The code reads both formats during the rollout. Avoid putting credentials in receiver URLs; prefer the HMAC contract.
 
 ## Operator secret storage
 

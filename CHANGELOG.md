@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Encrypt complete webhook destinations, mask URL credentials in forms, upgrade legacy rows in bounded batches, redact query telemetry and disable destination traces.
+
 - Secure-account recovery revokes prior sessions and OAuth flows, requires credential proof, and can remove an unexpected GitHub link.
 
 - Fix GitHub sign-in on Workers by using supported manual redirect handling for token exchange and identity lookup; reject redirects without forwarding credentials.

@@ -11,9 +11,8 @@
   },
   "observability": {
     "enabled": true,
-    "traces": {
-      "enabled": true,
-    },
+    "redact_query_string": true,
+    "traces": { "enabled": false }
   },
   "d1_databases": [
     {

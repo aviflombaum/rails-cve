@@ -1,3 +1,9 @@
+import {
+  readDestination,
+  storeDestination,
+  displayEndpoint,
+  encryptLegacyDestinations,
+} from "./destinations";
 import { IntegrationIndex, IntegrationGuide } from "./integration-views";
 import { Hono } from "hono";
 import { contextStorage } from "hono/context-storage";
@@ -207,17 +213,21 @@ app.get("/dashboard", async (c) => {
     .all<Endpoint>();
   return c.html(
     <Dashboard
-      endpoints={endpoints.results}
+      endpoints={await Promise.all(endpoints.results.map((e) => displayEndpoint(c.env, e)))}
       emails={await addresses(c.env, c.get("accountId"))}
       email={emailEnabled(c.env)}
       message={c.req.query("message")?.slice(0, 250)}
     />,
   );
 });
-async function preferences(c: import("hono").Context<App>) {
+async function preferences(c: import("hono").Context<App>, existing?: Endpoint) {
   const form = await c.req.parseBody();
   const name = String(form.name || "").trim(),
-    url = String(form.url || "").trim(),
+    url =
+      String(form.url || "").trim() ||
+      (existing && form.clear_url !== "on"
+        ? await readDestination(existing.url, c.env.ENCRYPTION_KEY)
+        : ""),
     mode = String(form.delivery_mode || "webhook"),
     emailId = String(form.email_id || "");
   if (!name || name.length > 80) throw new Error("Enter an app name of 1–80 characters.");
@@ -253,7 +263,7 @@ app.post("/endpoints", async (c) => {
       id,
       c.get("accountId"),
       name,
-      url,
+      await storeDestination(url, c.env.ENCRYPTION_KEY),
       await seal(secret, c.env.ENCRYPTION_KEY),
       token(),
       mode,
@@ -274,7 +284,7 @@ app.post("/endpoints", async (c) => {
       title="Meet your signing secret."
       label="Signing secret"
       secret={secret}
-      endpoint={endpoint!}
+      endpoint={await displayEndpoint(c.env, endpoint!)}
     />,
   );
 });
@@ -288,11 +298,11 @@ app.post("/endpoints/:id/:action", async (c) => {
   if (action === "settings") {
     let config;
     try {
-      config = await preferences(c);
+      config = await preferences(c, e);
     } catch (error) {
       return c.html(<ErrorPage message={(error as Error).message} />, 400);
     }
-    const changed = config.url !== e.url,
+    const changed = config.url !== (await readDestination(e.url, c.env.ENCRYPTION_KEY)),
       secret = token("whsec_");
     const status =
       e.status === "paused"
@@ -305,7 +315,7 @@ app.post("/endpoints/:id/:action", async (c) => {
         "UPDATE endpoints SET name=?,url=?,delivery_mode=?,email_id=?,status=?,webhook_verified=?,secret=?,challenge=? WHERE id=? AND account_id=?",
       ).bind(
         config.name,
-        config.url,
+        await storeDestination(config.url, c.env.ENCRYPTION_KEY),
         config.mode,
         config.emailId,
         status,
@@ -325,7 +335,7 @@ app.post("/endpoints/:id/:action", async (c) => {
           title="Save your new signing secret."
           label="Signing secret"
           secret={secret}
-          endpoint={{ ...e, url: config.url }}
+          endpoint={await displayEndpoint(c.env, { ...e, url: config.url })}
         />,
       );
     return c.redirect("/dashboard?message=Delivery%20settings%20saved.", 303);
@@ -405,6 +415,7 @@ app.post("/api/admin/sync", async (c) => {
   const value = c.req.header("authorization")?.replace(/^Bearer /, "") || "";
   if (!c.env.ADMIN_TOKEN || !(await equal(value, c.env.ADMIN_TOKEN)))
     return c.json({ error: "Unauthorized" }, 401);
+  await encryptLegacyDestinations(c.env);
   const result = await sync(c.env);
   await drain(c.env);
   return c.json(result);
@@ -438,6 +449,7 @@ export default {
   fetch: app.fetch,
   async scheduled(_event, env, _ctx) {
     try {
+      await encryptLegacyDestinations(env);
       await sync(env);
     } finally {
       await drain(env);

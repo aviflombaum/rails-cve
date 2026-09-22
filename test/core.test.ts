@@ -1,3 +1,4 @@
+import { readDestination, encryptLegacyDestinations } from "../src/destinations";
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../src/index";
@@ -1068,5 +1069,51 @@ describe("secure account recovery", () => {
     expect((await request("/settings/token", cookiePost(proofCookie))).status).toBe(302);
     const newCookie = recovery.headers.get("set-cookie")!.split(";")[0];
     expect((await request("/settings/token", cookiePost(newCookie))).status).toBe(403);
+  });
+});
+
+describe("private webhook destinations", () => {
+  it("encrypts and masks URL credentials while blank edits keep the exact saved destination", async () => {
+    await endpoint();
+    const url = "https://receiver.example.net/private-path?key=private-query";
+    const created = await request("/endpoints", post({ name: "Private URL", url }));
+    const html = await created.text();
+    expect(html).not.toContain("private-path");
+    expect(html).not.toContain("private-query");
+    const row = await bindings.DB.prepare(
+      "SELECT * FROM endpoints WHERE name='Private URL'",
+    ).first<Endpoint>();
+    expect(row!.url).not.toContain("private-query");
+    expect(row!.url).toMatch(/^url:v1:/);
+    expect(await readDestination(row!.url, bindings.ENCRYPTION_KEY)).toBe(url);
+    const dashboard = await (
+      await request("/dashboard", { headers: { authorization: "Bearer management" } })
+    ).text();
+    expect(dashboard).not.toContain("private-path");
+    expect(dashboard).not.toContain("private-query");
+    expect(
+      (await request(`/endpoints/${row!.id}/settings`, post({ name: "Renamed", url: "" }))).status,
+    ).toBe(303);
+    const stored = await bindings.DB.prepare("SELECT url FROM endpoints WHERE id=?")
+      .bind(row!.id)
+      .first<string>("url");
+    expect(await readDestination(stored!, bindings.ENCRYPTION_KEY)).toBe(url);
+  });
+  it("upgrades legacy rows without changing delivery bytes or destination", async () => {
+    const ep = await endpoint();
+    expect(await encryptLegacyDestinations(bindings)).toBe(1);
+    expect(await encryptLegacyDestinations(bindings)).toBe(0);
+    expect(
+      await readDestination(
+        (await bindings.DB.prepare("SELECT url FROM endpoints").first<string>("url"))!,
+        bindings.ENCRYPTION_KEY,
+      ),
+    ).toBe(ep.url);
+    await enqueueTest(bindings, ep);
+    network();
+    await drain(bindings);
+    expect(await bindings.DB.prepare("SELECT status FROM deliveries").first("status")).toBe(
+      "delivered",
+    );
   });
 });

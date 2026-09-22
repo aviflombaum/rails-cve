@@ -1,3 +1,4 @@
+import { readDestination } from "./destinations";
 import { fanout } from "./fanout";
 import { sendAdvisoryEmail, emailEnabled } from "./email";
 import { boundedText, safeDestination, sign, unseal } from "./security";
@@ -22,10 +23,11 @@ export async function send(
   id: string,
   challenge = false,
 ) {
-  await safeDestination(endpoint.url);
+  const destination = await readDestination(endpoint.url, env.ENCRYPTION_KEY);
+  await safeDestination(destination);
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = await sign(await unseal(endpoint.secret, env.ENCRYPTION_KEY), timestamp, body);
-  const r = await fetch(endpoint.url, {
+  const r = await fetch(destination, {
     method: "POST",
     redirect: "manual",
     signal: AbortSignal.timeout(10000),
