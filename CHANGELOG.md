@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix GitHub sign-in on Workers by using supported manual redirect handling for token exchange and identity lookup; reject redirects without forwarding credentials.
+
 - Refresh legacy browser sessions before GitHub linking and report safe callback failure references for troubleshooting.
 - Link the public GitHub repository from site navigation and footer with a GitHub icon and View Source label.
 - Add the live Cloudflare import button, real CI status badge, clone instructions, and published deployment-agent guide links.

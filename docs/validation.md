@@ -88,3 +88,10 @@ Typecheck and all 14 runtime tests passed. agent-browser verified desktop/mobile
 - Deployed the source-link and callback changes. agent-browser confirmed GitHub icons/links, desktop and 390px mobile pages without horizontal overflow, the published self-host prompt and the callback recovery page.
 - Production GitHub credentials pass an invalid-code exchange probe; a real authenticated callback still requires a fresh user authorization. The original generic error did not record enough detail to establish its cause. New failures expose a safe stage/reference for diagnosis.
 - The Cloudflare import button targets the public repository; fresh-account resource provisioning has not been independently exercised.
+
+
+### GitHub callback root cause and fix
+
+Fresh production failures isolated the token request. Constructing a real Workers `Request` inside the previously mocked GitHub exchange reproduced the failure: the runtime rejected `redirect: "error"`. Both OAuth fetches now use `manual` and reject non-2xx responses before parsing. Tests construct the actual runtime request for both token exchange and identity lookup, and cover rejected redirects at each stage without forwarding credentials. All 41 tests, formatting and typecheck pass.
+
+A live deliberately invalid-code probe now reaches GitHub and receives its expected HTTP 200 rejection, rather than failing during request construction. No real user code was reused. Full sign-in is awaiting the user's fresh authorization.

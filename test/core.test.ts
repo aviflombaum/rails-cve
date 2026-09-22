@@ -690,10 +690,17 @@ async function startOAuth(credential?: string) {
 function githubIdentity(id = 1234, login = "octocat") {
   vi.mocked(fetch).mockImplementation(async (input, init) => {
     if (String(input) === "https://github.com/login/oauth/access_token") {
+      const outgoing = new Request(String(input), init);
+      expect(outgoing.method).toBe("POST");
+      expect(outgoing.redirect).toBe("manual");
       expect(JSON.parse(String(init?.body)).code_verifier).toHaveLength(64);
       return Response.json({ access_token: "provider-token", refresh_token: "provider-refresh" });
     }
-    if (String(input) === "https://api.github.com/user") return Response.json({ id, login });
+    if (String(input) === "https://api.github.com/user") {
+      const outgoing = new Request(String(input), init);
+      expect(outgoing.redirect).toBe("manual");
+      return Response.json({ id, login });
+    }
     throw new Error("Unexpected OAuth URL");
   });
 }
@@ -759,6 +766,31 @@ describe("GitHub App identity", () => {
       expect(output).not.toContain(secret);
     log.mockRestore();
   });
+  it.each(["token", "profile"])(
+    "rejects %s redirects without forwarding credentials",
+    async (redirectStage) => {
+      const flow = await startOAuth();
+      vi.mocked(fetch).mockImplementation(async (input, init) => {
+        const outgoing = new Request(String(input), init);
+        expect(outgoing.redirect).toBe("manual");
+        if (redirectStage === "profile" && outgoing.url.endsWith("/access_token"))
+          return Response.json({ access_token: "provider-token" });
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "https://untrusted.example/" },
+        });
+      });
+      const response = await request(
+        `/auth/github/callback?state=${flow.state}&code=code`,
+        { headers: { cookie: flow.cookie } },
+        oauthEnv(),
+      );
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain(`${redirectStage}:`);
+      expect(fetch).toHaveBeenCalledTimes(redirectStage === "token" ? 1 : 2);
+      expect(await bindings.DB.prepare("SELECT COUNT(*) n FROM accounts").first("n")).toBe(0);
+    },
+  );
   it("registers with PKCE, consumes state once, and never persists provider tokens", async () => {
     const flow = await startOAuth();
     githubIdentity();

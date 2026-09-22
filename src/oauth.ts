@@ -13,10 +13,17 @@ type FailureStage =
   | "profile"
   | "account"
   | "session";
-function fail(stage: FailureStage, status?: number) {
+function fail(stage: FailureStage, status?: number, operation?: string, reason?: string) {
   const reference = crypto.randomUUID();
   // Never log provider bodies, URLs, codes, state, cookies, or exception messages.
-  console.warn({ event: "github_signin_failed", stage, reference, ...(status ? { status } : {}) });
+  console.warn({
+    event: "github_signin_failed",
+    stage,
+    reference,
+    ...(status ? { status } : {}),
+    operation,
+    reason,
+  });
   return new Response(
     `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>GitHub sign-in · Rails CVE</title><link rel="stylesheet" href="/style.css"><main class="shell"><h1>GitHub sign-in could not be completed.</h1><p>Start a fresh sign-in in the same browser. Sign-in links expire after ten minutes and can only be used once.</p><p><a href="/login">Return to sign in</a> · <a href="/settings">Return to settings</a></p><p>If it happens again, share this reference: <code>${stage}: ${reference}</code></p></main></html>`,
     { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
@@ -85,10 +92,12 @@ routes.get("/auth/github/callback", async (c) => {
   const current = await currentAccount(c);
   if ((row.account_id || null) !== (current?.id || null)) return fail("account_changed");
   let stage: FailureStage = "token";
+  let operation = "request";
+  let providerStatus: number | undefined;
   try {
     const res = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(10000),
       headers: {
         Accept: "application/json",
@@ -103,12 +112,17 @@ routes.get("/auth/github/callback", async (c) => {
         redirect_uri: `${c.env.APP_URL}/auth/github/callback`,
       }),
     });
+    providerStatus = res.status;
+    if (!res.ok) return fail("token", res.status);
+    operation = "parse_response";
     const credentials = JSON.parse(await boundedText(res, 16384));
     if (!res.ok || typeof credentials.access_token !== "string" || credentials.error)
       return fail("token", res.status);
     stage = "profile";
+    operation = "request";
+    providerStatus = undefined;
     const userResponse = await fetch("https://api.github.com/user", {
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(10000),
       headers: {
         Authorization: `Bearer ${credentials.access_token}`,
@@ -116,6 +130,9 @@ routes.get("/auth/github/callback", async (c) => {
         "User-Agent": "Rails-CVE/1.0",
       },
     });
+    providerStatus = userResponse.status;
+    if (!userResponse.ok) return fail("profile", userResponse.status);
+    operation = "parse_response";
     const user = JSON.parse(await boundedText(userResponse, 32768));
     if (
       !userResponse.ok ||
@@ -126,6 +143,8 @@ routes.get("/auth/github/callback", async (c) => {
     )
       return fail("profile", userResponse.status);
     stage = "account";
+    operation = "database";
+    providerStatus = undefined;
     const githubId = String(user.id);
     let account = await c.env.DB.prepare("SELECT * FROM accounts WHERE github_id=?")
       .bind(githubId)
@@ -167,8 +186,22 @@ routes.get("/auth/github/callback", async (c) => {
       "/settings?message=GitHub%20connected.%20Choose%20your%20notification%20preferences.",
       303,
     );
-  } catch {
-    return fail(stage);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const reason = /redirect/i.test(message)
+      ? "redirect"
+      : /timed? ?out|timeout/i.test(message)
+        ? "timeout"
+        : /dns|resolve/i.test(message)
+          ? "dns"
+          : /ssl|tls|certificate/i.test(message)
+            ? "tls"
+            : error instanceof TypeError
+              ? "type_error"
+              : error instanceof SyntaxError
+                ? "invalid_json"
+                : "request_error";
+    return fail(stage, providerStatus, operation, reason);
   }
 });
 export default routes;
