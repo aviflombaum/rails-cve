@@ -46,7 +46,7 @@ jobs:
           docker run -d --name egress-check --read-only --cap-drop=ALL --security-opt=no-new-privileges \
             -e EGRESS_PROXY_TOKEN -p 127.0.0.1:18080:8080 rails-cve-egress:check
           trap 'docker rm -f egress-check >/dev/null' EXIT
-          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 \
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 1 --retry-max-time 30 --max-time 5 \
             -H "Authorization: Bearer $EGRESS_PROXY_TOKEN" http://127.0.0.1:18080/health > /tmp/egress-health.json
           node -e 'const assert = require("node:assert/strict"); assert.deepEqual(require("/tmp/egress-health.json"), { status: "ok" })'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/health)" = 401
