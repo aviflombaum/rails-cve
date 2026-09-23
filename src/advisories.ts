@@ -1,6 +1,7 @@
 import { MAX_EVENT_BYTES, eventBytes } from "./limits";
 import { fanout } from "./fanout";
 import { boundedText, hash } from "./security";
+import { advisoryToken } from "./github-polling";
 export interface Advisory {
   id: string;
   cve: string | null;
@@ -140,6 +141,7 @@ export async function sync(env: Env) {
     .first();
   if (!acquired) return { skipped: true };
   try {
+    const credential = await advisoryToken(env);
     const list: Advisory[] = [];
     for (let page = 1; page <= 20; page++) {
       const response = await fetch(
@@ -148,7 +150,7 @@ export async function sync(env: Env) {
           headers: {
             Accept: "application/vnd.github+json",
             "User-Agent": "Rails-CVE/1.0",
-            ...(env.GITHUB_TOKEN ? { Authorization: `Bearer ${env.GITHUB_TOKEN}` } : {}),
+            ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
           },
           redirect: "manual",
           signal: AbortSignal.timeout(15000),

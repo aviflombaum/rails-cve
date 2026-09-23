@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Authenticate canonical advisory polling with automatically renewed, metadata-only GitHub App installation tokens. Keep private keys in Worker secrets; preserve source data and report degraded health when token issuance fails.
+
 - Rewrite the documentation for Rails developers: a getting-started guide, a coding-agent guide, plain-language workspace, email, webhook, self-hosting and egress guides, and a README organised around the hosted service versus your own deployment.
 - Add a documentation section to the site at `/docs` with pages for email, webhooks (including the example payload), coding agents, workspace, and self-hosting. Pages show a notice when a channel is not configured on the deployment. The `/docs#example-payload` anchor still resolves.
 - Rename the site navigation entry to Docs and link the new pages from the footer, home page, and integrations index.

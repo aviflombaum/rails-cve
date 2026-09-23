@@ -147,6 +147,7 @@ bunx wrangler deploy --dry-run   # package without publishing
 | [Deploy with an agent](docs/deploy-with-agent.md) | The Cloudflare button and a copy-paste deployment prompt. |
 | [Egress gateway](docs/egress.md) | The Node service that sends webhooks from a pinned public address. |
 | [GitHub sign-in](docs/integrations/github-app.md) | Registering a GitHub App for login on your deployment. |
+| [Authenticated polling](docs/integrations/github-polling.md) | Renewing GitHub App installation tokens for the public advisory feed. |
 | [Email transport](docs/integrations/email.md#operators-configuring-outbound-email) | SMTP or Cloudflare Email Service configuration. |
 | [Operations](docs/operations.md) | Monitoring, budgets, retention, upgrades, and rollback. |
 

@@ -35,6 +35,10 @@ bunx wrangler secret put GITHUB_CLIENT_SECRET --config wrangler.deploy.jsonc
 
 Deploy the configured Worker. No private key, installation token, App ID, webhook secret, or `GITHUB_TOKEN` is required for login. `GITHUB_TOKEN` is a separate optional credential for higher upstream advisory polling limits; it is not the login client secret.
 
+For automatic installation-token renewal when polling the public advisory feed,
+follow [Authenticated polling](github-polling.md). That optional operator setup
+uses a private key and an installation; it does not enable repository issue delivery.
+
 With both credentials present, `/connect` and `/login` display Continue with GitHub. An existing token user should first restore their workspace and select Connect GitHub in `/settings`. Signing in without restoring first creates/opens that GitHub identity's workspace; we deliberately do not merge accounts based on email. Linking an identity already owned by another workspace returns a conflict.
 
 Test registration, logout/login, an existing workspace link, canceled authorization, rejected/reused state, and mismatched browser cookies. Test on your actual callback origin; mocks cannot validate GitHub's registration settings. Keep a recovery token in a password manager.

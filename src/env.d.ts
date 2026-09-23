@@ -7,6 +7,9 @@ interface Env {
   EGRESS_PROXY_URL?: string;
   EGRESS_PROXY_TOKEN?: string;
   GITHUB_TOKEN?: string;
+  GITHUB_APP_ID?: string;
+  GITHUB_APP_INSTALLATION_ID?: string;
+  GITHUB_APP_PRIVATE_KEY?: string;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   EMAIL?: SendEmail;

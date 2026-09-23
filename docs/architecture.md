@@ -35,6 +35,12 @@ The initial import creates a baseline only. Later revisions use deterministic ID
 
 The optional email handler requests the same canonical sync; it does not parse email bodies into advisory facts. Polling remains the reconciliation path.
 
+`src/github-polling.ts` optionally authenticates this fixed feed with an explicit
+operator token or a fresh metadata-only GitHub App installation token for each
+sync. App keys stay in Worker secrets and issued tokens stay in invocation memory.
+Partial configuration and failed token exchanges fail closed without changing
+stored advisories. See [authenticated polling](integrations/github-polling.md).
+
 ## Delivery lifecycle
 
 ```mermaid
